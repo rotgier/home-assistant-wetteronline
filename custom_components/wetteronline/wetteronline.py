@@ -5,7 +5,10 @@ import typing
 import ast
 import html
 ## non std lib: requests, bs4, lxml
+from datetime import datetime,timedelta,timezone
+from typing import Final
 
+MIDNIGHT: Final = datetime.min.time()
 
 def location(location: str):
     """
@@ -109,9 +112,12 @@ class WeatherUtils:
         """
         Returns the full 24h forecast of the given `url`. Note that `url` is not a full URL, but a fragment like returned by `location.url`!
         """
+        today = datetime.combine(datetime.today(), MIDNIGHT)
+        tomorrow = today + timedelta(days = 1)
+
         soup = bs4.BeautifulSoup(self.get_markup(url), "lxml")
         scripts = soup.find("div", {"id": "hourly-container"}).find_all("script")
-        returndict = {}
+        hourly_forecast = []
         replace_keys = {"windGusts": "windGustsBft", "windDirection": "windDirectionLong", "windDirectionShortSector": "windDirection"}
         for script in scripts:
             script = str(script).split("({")[1].split("})")[0].strip().replace(" ", "")
@@ -121,24 +127,33 @@ class WeatherUtils:
                     smallreturnlist.append(f'"{replace_keys[entry.split(":")[0]]}": {entry.split(":")[1]}')
                 else:
                     smallreturnlist.append(f'"{entry.split(":")[0]}": {entry.split(":")[1]}')
-            smallreturndict = ast.literal_eval("{" + "".join(smallreturnlist) + "}")
+            hourly_data = ast.literal_eval("{" + "".join(smallreturnlist) + "}")
 
             ## delete useless keys
-            for key in ["dayTime", "daySynonym", "docrootVersion", "windSpeedText", "windDirectionLong"]:
-                smallreturndict.pop(key, None)
+            hourly_data.pop("docrootVersion", None)
+            # for key in ["dayTime", "daySynonym", "docrootVersion", "windSpeedText", "windDirectionLong"]:
+            #    smallreturndict.pop(key, None)
             ## delete unknown keys
-            for key in ["smog", "tierAppendix", "symbol", "symbolText", "windy", "weatherInfoIndex"]:
-                smallreturndict.pop(key, None)
+            # for key in ["smog", "tierAppendix", "symbol", "symbolText", "windy", "weatherInfoIndex"]:
+            #    smallreturndict.pop(key, None)
 
-            hour = smallreturndict.pop("hour")
+            daySynonym = hourly_data['daySynonym']
+            match daySynonym:
+                case "heute":
+                    forecast_day = today
+                case "morgen":
+                    forecast_day = tomorrow
+                case _:
+                    raise ValueError(f"daySynonym {daySynonym} is different than 'heute' and 'morgen'")
 
-            ## filter doubling hours, the website provides inconsistently between 24 and 47 datapoints
-            ## yes, data may be lost here, but the api can assure 24h every call
-            if hour in list(returndict):
-                continue
-            returndict[hour] = smallreturndict
+            hour = hourly_data.pop("hour")
+            date_with_hour = forecast_day.replace(hour = hour)
+            datetime_utc = date_with_hour.astimezone(timezone.utc)
+            hourly_data['datetime'] = datetime_utc
 
-        return returndict
+            hourly_forecast.append(hourly_data)
+
+        return hourly_forecast
 
     def forecast_4d(self, url: str):
         """

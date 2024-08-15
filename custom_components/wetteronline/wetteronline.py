@@ -60,7 +60,7 @@ class WeatherUtils:
                        .text)
         return {
             "temperature": temperature,
-            "symbol": "symbol"
+            "symbolText": "symbol"
         }
 
 
@@ -86,19 +86,12 @@ class WeatherUtils:
             for entry in script.split("\n"):
                 key = entry.split(":")[0]
                 value = entry.split(":")[1]
-                if entry.split(":")[0] in list(replace_keys):
-                    hourly_data_raw.append(f'"{replace_keys[entry.split(":")[0]]}": {entry.split(":")[1]}')
-                else:
-                    hourly_data_raw.append(f'"{entry.split(":")[0]}": {entry.split(":")[1]}')
+                key = replace_keys.get(key, key)
+                hourly_data_raw.append(f'"{key}": {value}')
             hourly_data = ast.literal_eval("{" + "".join(hourly_data_raw) + "}")
 
-            ## delete useless keys
+            ## delete useless key
             hourly_data.pop("docrootVersion", None)
-            # for key in ["dayTime", "daySynonym", "docrootVersion", "windSpeedText", "windDirectionLong"]:
-            #    smallreturndict.pop(key, None)
-            ## delete unknown keys
-            # for key in ["smog", "tierAppendix", "symbol", "symbolText", "windy", "weatherInfoIndex"]:
-            #    smallreturndict.pop(key, None)
 
             daySynonym = hourly_data['daySynonym']
             match daySynonym:
@@ -110,8 +103,7 @@ class WeatherUtils:
                     raise ValueError(f"daySynonym {daySynonym} is different than 'heute' and 'morgen'")
 
             hour = hourly_data.pop("hour")
-            date_with_hour = forecast_day.replace(hour = hour)
-            hourly_data['datetime'] = date_with_hour.astimezone(timezone.utc)
+            hourly_data['datetime'] = forecast_day.replace(hour = hour)
 
             forecast.append(hourly_data)
 

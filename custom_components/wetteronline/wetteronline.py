@@ -1,8 +1,7 @@
 import bs4
 import ast
 import html
-## non std lib: requests, bs4, lxml
-from datetime import datetime,timedelta,timezone
+from datetime import datetime, timedelta
 from typing import Final, Any
 from aiohttp import ClientSession
 
@@ -47,7 +46,7 @@ class WeatherUtils:
 
     def __init__(self, raw_html = None):
         """
-        Initialize BeautifulSoup object with raw html
+        Initialize BeautifulSoup object with raw html.
         """
         self.soup = bs4.BeautifulSoup(raw_html, "lxml")
 
@@ -58,10 +57,25 @@ class WeatherUtils:
                        .find("div", {"id": "nowcast-card-temperature"})
                        .find("div", {"class":"value"})
                        .text)
-        return {
-            "temperature": temperature,
-            "symbolText": "symbol"
+        temperature = int(temperature)
+        current_observations = {
+            "temperature": temperature
         }
+
+        current_observations_raw = (self.soup
+               .find("div", {"id": "product_display"})
+               .find("script").text)
+        for line in current_observations_raw.split("\n"):
+            line = line.strip()
+            if (not line or
+                    line.startswith("WO") or
+                    line == "};"):
+                continue
+            clean = lambda arg: arg.strip().strip(',').strip('"')
+            [key, value] = map(clean,line.split(":"))
+            current_observations[key] = value
+
+        return current_observations
 
 
     def hourly_forecast(self) -> list[dict[str, Any]]:

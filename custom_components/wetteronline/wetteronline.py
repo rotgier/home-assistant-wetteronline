@@ -1,133 +1,96 @@
-import requests
-import json
 import bs4
-import typing
 import ast
 import html
 ## non std lib: requests, bs4, lxml
 from datetime import datetime,timedelta,timezone
-from typing import Final
+from typing import Final, Any
+from aiohttp import ClientSession
+
+from dataclasses import dataclass
 
 MIDNIGHT: Final = datetime.min.time()
-
-def location(location: str):
-    """
-    Requests the exact URL and any autosuggests for `location`.
-    """
-    return Location(location)
+HTTP_HEADERS: dict[str, str] = {
+    "Accept-Encoding": "gzip",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36"
+}
 
 
-def weather(url: str):
-    """
-    Requests weather data for `url`. Note that `url` is not a full URL, but a fragment like returned by `location.url`!
-    """
-    return Weather(url)
+@dataclass
+class WetterOnlineData:
+    """Data from WetterOnline."""
+    current_observations: dict[str, Any]
+    daily_forecast: list[dict[str, Any]]
+    hourly_forecast: list[dict[str, Any]]
 
 
-class Location:
-    def __repr__(self):
-        return "<WetterOnline Location object>"
+class WetterOnline:
+    """Main class to perform WetterOnline requests."""
 
-    def __init__(self, location: str):
-        self.url = LocationUtils().url(location)
-        self.autosuggests = LocationUtils().autosuggest(location)
+    def __init__(self, session: ClientSession, url: str) -> None:
+        self._session = session
+        self._complete_url = f"https://www.wetteronline.de/{url}"
 
-
-class Weather:
-    def __repr__(self):
-        return "<WetterOnline Weather object>"
-
-    def __init__(self, url: str):
-        raw_html = html.unescape(requests.get(f"https://www.wetteronline.de/{url}", allow_redirects = False).text)
-        #self.debug_raw_html = raw_html
-        weatherutils = WeatherUtils(markup = raw_html)
-        self.temperature_now = weatherutils.temperature_now(url)
-        self.forecast_24h = weatherutils.forecast_24h(url)
-        self.forecast_4d = weatherutils.forecast_4d(url)
-
-
-
-class LocationUtils:
-    def __repr__(self):
-        return "<WetterOnline LocationUtils object>"
-
-    def __init__(self):
-        pass
-
-    def url(self, location) -> typing.Union[bool, str]:
-        """
-        Returns the specific weather URL of a given `location`, if the `location` is not found returns `False`.
-        """
-        r = requests.get(f"https://www.wetteronline.de/search?ireq=true&pid=p_search&searchstring={location}", allow_redirects = False)
-        soup = bs4.BeautifulSoup(html.unescape(r.text), "lxml")
-        try:
-            if soup.find("a").get("href").startswith("/wetter/") or soup.find("a").get("href").startswith("/?gid"):
-                return soup.find("a").get("href").lstrip("/")
-            else:
-                return False
-        except:
-            return False
-
-
-    def autosuggest(self, location) -> typing.Union[bool, list]:
-        """
-        Returns a list of autosuggests of a given `location`, if the `location` is not found returns `False`.
-        """
-        r = requests.get(f"https://www.wetteronline.de/autosuggest?ireq=true&pid=a_autosuggest&s={location}", allow_redirects = False)
-        returnlist = []
-        for i in r.json():
-            if "id" in list(i):
-                returnlist.append(i["n"])
-        if returnlist == []:
-            return False
-        else:
-            return returnlist
+    async def async_get_weather(self) -> WetterOnlineData:
+        async with self._session.get(self._complete_url,
+                                     headers=HTTP_HEADERS,
+                                     allow_redirects= False) as resp:
+            raw_html = html.unescape(await resp.text())
+            weather_utils = WeatherUtils(raw_html)
+            return WetterOnlineData(
+                current_observations=weather_utils.current_observations(),
+                daily_forecast=weather_utils.daily_forecast(),
+                hourly_forecast=weather_utils.hourly_forecast()
+            )
 
 
 class WeatherUtils:
-    def __repr__(self):
-        return "<WetterOnline WeatherUtils object>"
 
-    def __init__(self, markup = None):
+    def __init__(self, raw_html = None):
         """
-        Initialize `markup` with valid HTML, else fresh markup is requested whenever `WeatherUtils()` is called.
+        Initialize BeautifulSoup object with raw html
         """
-        self.markup = markup
-        pass
+        self.soup = bs4.BeautifulSoup(raw_html, "lxml")
 
-    def get_markup(self, url: str) -> str:
-        if self.markup == None:
-            return html.unescape(requests.get(f"https://www.wetteronline.de/{url}", allow_redirects = False).text)
-        else:
-            return self.markup
+    def current_observations(self) -> dict[str, Any]:
+        """ Returns the current observations 4 day forecast of the given `url`. """
 
-    def temperature_now(self, url: str):
-        """
-        Returns the momentary temperature of the given `url`. Note that `url` is not a full URL, but a fragment like returned by `location.url`!
-        """
-        soup = bs4.BeautifulSoup(self.get_markup(url), "lxml")
-        return soup.find("div", {"id": "nowcast-card-temperature"}).find("div", {"class":"value"}).text
+        temperature = (self.soup
+                       .find("div", {"id": "nowcast-card-temperature"})
+                       .find("div", {"class":"value"})
+                       .text)
+        return {
+            "temperature": temperature,
+            "symbol": "symbol"
+        }
 
-    def forecast_24h(self, url: str):
-        """
-        Returns the full 24h forecast of the given `url`. Note that `url` is not a full URL, but a fragment like returned by `location.url`!
-        """
+
+    def hourly_forecast(self) -> list[dict[str, Any]]:
+        """ Returns the hourly forecast of the given `url` for today and tomorrow. """
+
         today = datetime.combine(datetime.today(), MIDNIGHT)
         tomorrow = today + timedelta(days = 1)
 
-        soup = bs4.BeautifulSoup(self.get_markup(url), "lxml")
-        scripts = soup.find("div", {"id": "hourly-container"}).find_all("script")
-        hourly_forecast = []
-        replace_keys = {"windGusts": "windGustsBft", "windDirection": "windDirectionLong", "windDirectionShortSector": "windDirection"}
+        scripts = (self.soup
+                   .find("div", {"id": "hourly-container"})
+                   .find_all("script"))
+        forecast: list[dict[str, Any]] = []
+
+        replace_keys = {
+            "windGusts": "windGustsBft",
+            "windDirection": "windDirectionLong",
+            "windDirectionShortSector": "windDirection"
+        }
         for script in scripts:
             script = str(script).split("({")[1].split("})")[0].strip().replace(" ", "")
-            smallreturnlist = []
+            hourly_data_raw = []
             for entry in script.split("\n"):
+                key = entry.split(":")[0]
+                value = entry.split(":")[1]
                 if entry.split(":")[0] in list(replace_keys):
-                    smallreturnlist.append(f'"{replace_keys[entry.split(":")[0]]}": {entry.split(":")[1]}')
+                    hourly_data_raw.append(f'"{replace_keys[entry.split(":")[0]]}": {entry.split(":")[1]}')
                 else:
-                    smallreturnlist.append(f'"{entry.split(":")[0]}": {entry.split(":")[1]}')
-            hourly_data = ast.literal_eval("{" + "".join(smallreturnlist) + "}")
+                    hourly_data_raw.append(f'"{entry.split(":")[0]}": {entry.split(":")[1]}')
+            hourly_data = ast.literal_eval("{" + "".join(hourly_data_raw) + "}")
 
             ## delete useless keys
             hourly_data.pop("docrootVersion", None)
@@ -148,49 +111,46 @@ class WeatherUtils:
 
             hour = hourly_data.pop("hour")
             date_with_hour = forecast_day.replace(hour = hour)
-            datetime_utc = date_with_hour.astimezone(timezone.utc)
-            hourly_data['datetime'] = datetime_utc
+            hourly_data['datetime'] = date_with_hour.astimezone(timezone.utc)
 
-            hourly_forecast.append(hourly_data)
+            forecast.append(hourly_data)
 
-        return hourly_forecast
+        return forecast
 
-    def forecast_4d(self, url: str):
-        """
-        Returns the full 4 day forecast of the given `url`. Note that `url` is not a full URL, but a fragment like returned by `location.url`!
-        """
-        soup = bs4.BeautifulSoup(self.get_markup(url), "lxml")
+    def daily_forecast(self) -> list[dict[str, Any]]:
+        """ Returns the full 4 day forecast of the given `url`. """
+
         ## get dates first
-        returndict = {}
-        for i in soup.find("table", {"id":"daterow"}).find_all("th"):
+        forecast : list[dict[str, Any]] = []
+        for i in self.soup.find("table", {"id":"daterow"}).find_all("th"):
             date = i.find("span").text
             if "," in list(date):
                 date = date.split(", ")[1]
-            returndict[date] = {}
+            forecast.append({'date': date})
 
-        weathertable = soup.find("table", {"id": "weather"})
+        weathertable = self.soup.find("table", {"id": "weather"})
         ## maxtemp
         taglist = list(weathertable.find("tr", {"class": "Maximum Temperature"}).find_all("div"))
         for i in range(len(taglist)):
             tag = taglist[i].find_all("span")[1]
-            returndict[list(returndict)[i]]["maxTemperature"] = int(str(tag.text).rstrip("°"))
+            forecast[i]["maxTemperature"] = int(str(tag.text).rstrip("°"))
 
         ## mintemp
         taglist = list(weathertable.find("tr", {"class": "Minimum Temperature"}).find_all("div"))
         for i in range(len(taglist)):
             tag = taglist[i].find_all("span")[1]
-            returndict[list(returndict)[i]]["minTemperature"] = int(str(tag.text).rstrip("°"))
+            forecast[i]["minTemperature"] = int(str(tag.text).rstrip("°"))
 
         ## sunhours
         taglist = list(weathertable.find("tr", {"id": "sun_teaser"}).find_all("span"))
         for i in range(len(taglist)):
             tag = taglist[i]
-            returndict[list(returndict)[i]]["sunHours"] = int(str(tag.text).lstrip().rstrip(" Std.\n"))
+            forecast[i]["sunHours"] = int(str(tag.text).lstrip().rstrip(" Std.\n"))
 
         ## precipitation probability
         taglist = list(weathertable.find("tr", {"id": "precipitation_teaser"}).find_all("span"))
         for i in range(len(taglist)):
             tag = taglist[i]
-            returndict[list(returndict)[i]]["precipitationProbability"] = int(str(tag.text).lstrip().rstrip(" %\n"))
+            forecast[i]["precipitationProbability"] = int(str(tag.text).lstrip().rstrip(" %\n"))
 
-        return returndict
+        return forecast

@@ -121,36 +121,43 @@ class WeatherUtils:
         """ Returns the full 4 day forecast of the given `url`. """
 
         ## get dates first
-        forecast : list[dict[str, Any]] = []
-        for i in self.soup.find("table", {"id":"daterow"}).find_all("th"):
-            date = i.find("span").text
-            if "," in list(date):
-                date = date.split(", ")[1]
-            forecast.append({'date': date})
+        forecast: list[dict[str, Any]] = []
 
-        weathertable = self.soup.find("table", {"id": "weather"})
-        ## maxtemp
-        taglist = list(weathertable.find("tr", {"class": "Maximum Temperature"}).find_all("div"))
-        for i in range(len(taglist)):
-            tag = taglist[i].find_all("span")[1]
+        forecast_date = None
+        for i in self.soup.find("table", {"id": "daterow"}).find_all("th"):
+            if forecast_date is None:
+                date = i.find("span").text
+                if "," in list(date):
+                    date = date.split(", ")[1]
+                date += str(datetime.now().year)
+                forecast_date = datetime.strptime(date, '%d.%m.%Y')
+            else:
+                forecast_date = forecast_date + timedelta(days = 1)
+            forecast.append({'datetime': forecast_date})
+
+        weather_table = self.soup.find("table", {"id": "weather"})
+        # max temp
+        tags = list(weather_table.find("tr", {"class": "Maximum Temperature"}).find_all("div"))
+        for i in range(len(tags)):
+            tag = tags[i].find_all("span")[1]
             forecast[i]["maxTemperature"] = int(str(tag.text).rstrip("°"))
 
-        ## mintemp
-        taglist = list(weathertable.find("tr", {"class": "Minimum Temperature"}).find_all("div"))
-        for i in range(len(taglist)):
-            tag = taglist[i].find_all("span")[1]
+        # min temp
+        tags = list(weather_table.find("tr", {"class": "Minimum Temperature"}).find_all("div"))
+        for i in range(len(tags)):
+            tag = tags[i].find_all("span")[1]
             forecast[i]["minTemperature"] = int(str(tag.text).rstrip("°"))
 
-        ## sunhours
-        taglist = list(weathertable.find("tr", {"id": "sun_teaser"}).find_all("span"))
-        for i in range(len(taglist)):
-            tag = taglist[i]
+        # sun hours
+        tags = list(weather_table.find("tr", {"id": "sun_teaser"}).find_all("span"))
+        for i in range(len(tags)):
+            tag = tags[i]
             forecast[i]["sunHours"] = int(str(tag.text).lstrip().rstrip(" Std.\n"))
 
-        ## precipitation probability
-        taglist = list(weathertable.find("tr", {"id": "precipitation_teaser"}).find_all("span"))
-        for i in range(len(taglist)):
-            tag = taglist[i]
+        # precipitation probability
+        tags = list(weather_table.find("tr", {"id": "precipitation_teaser"}).find_all("span"))
+        for i in range(len(tags)):
+            tag = tags[i]
             forecast[i]["precipitationProbability"] = int(str(tag.text).lstrip().rstrip(" %\n"))
 
         return forecast

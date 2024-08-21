@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from asyncio import timeout
+import logging
 from typing import Any
 
-from .const import DOMAIN
-from .const import CONF_URL_WETTERONLINE
-
-# from .wetteronline_api import WetterOnline
 from aiohttp import ClientError
 from aiohttp.client_exceptions import ClientConnectorError
 import voluptuous as vol
@@ -16,7 +13,11 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_NAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
+
+from .const import CONF_URL_WETTERONLINE, DOMAIN
+from .wetteronline_api import WetterOnline
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class WetterOnlineFlowHandler(ConfigFlow, domain=DOMAIN):

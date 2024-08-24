@@ -30,7 +30,8 @@ class WetterOnline:
 
     def __init__(self, session: ClientSession, url: str) -> None:  # noqa: D107
         self._session = session
-        self.complete_url = f"https://www.wetteronline.de/{url}".replace("//", "/")
+        url = url.lstrip("/")
+        self.complete_url = f"https://www.wetteronline.de/{url}"
 
     async def async_get_weather(self) -> WetterOnlineData:
         """Fetch data from WetterOnline."""

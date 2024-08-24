@@ -28,11 +28,12 @@ class WetterOnlineData:
 class WetterOnline:
     """Main class to perform WetterOnline requests."""
 
-    def __init__(self, session: ClientSession, url: str) -> None:
+    def __init__(self, session: ClientSession, url: str) -> None:  # noqa: D107
         self._session = session
         self.complete_url = f"https://www.wetteronline.de/{url}".replace("//", "/")
 
     async def async_get_weather(self) -> WetterOnlineData:
+        """Fetch data from WetterOnline."""
         async with self._session.get(
             self.complete_url, headers=HTTP_HEADERS, allow_redirects=False
         ) as resp:
@@ -46,14 +47,13 @@ class WetterOnline:
 
 
 class WeatherUtils:
-    def __init__(self, raw_html=None):
-        """
-        Initialize BeautifulSoup object with raw html.
-        """
+    """Logic for extraction weather data from raw html."""
+
+    def __init__(self, raw_html=None) -> None:  # noqa: D107
         self.soup = bs4.BeautifulSoup(raw_html, "lxml")
 
     def current_observations(self) -> dict[str, Any]:
-        """Returns the current observations 4 day forecast of the given `url`."""
+        """Return the current observations 4 day forecast of the given `url`."""
 
         temperature = (
             self.soup.find("div", {"id": "nowcast-card-temperature"})
@@ -66,18 +66,22 @@ class WeatherUtils:
         current_observations_raw = (
             self.soup.find("div", {"id": "product_display"}).find("script").text
         )
+
+        def clean(arg):
+            return arg.strip().strip(",").strip('"')
+
         for line in current_observations_raw.split("\n"):
             line = line.strip()
             if not line or line.startswith("WO") or line == "};":
                 continue
-            clean = lambda arg: arg.strip().strip(",").strip('"')
+
             [key, value] = map(clean, line.split(":"))
             current_observations[key] = value
 
         return current_observations
 
     def hourly_forecast(self) -> list[dict[str, Any]]:
-        """Returns the hourly forecast of the given `url` for today and tomorrow."""
+        """Return the hourly forecast of the given `url` for today and tomorrow."""
 
         today = datetime.combine(datetime.today(), MIDNIGHT)
         tomorrow = today + timedelta(days=1)
@@ -122,7 +126,7 @@ class WeatherUtils:
         return forecast
 
     def daily_forecast(self) -> list[dict[str, Any]]:
-        """Returns the full 4 day forecast of the given `url`."""
+        """Return the full 4 day forecast of the given `url`."""
 
         ## get dates first
         forecast: list[dict[str, Any]] = []

@@ -6,7 +6,7 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "loggers": ["wetteronline"],
-  "requirements": ["beautifulsoup4==4.12.3"],
+  "requirements": ["beautifulsoup4==4.12.3", "lxml==5.3.0"],
   "single_config_entry": true,
   "version": "1.0.0"
 }

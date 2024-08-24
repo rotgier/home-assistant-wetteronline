@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -10,10 +9,8 @@ from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import UPDATE_INTERVAL_WETTERONLINE, CONF_URL_WETTERONLINE
-
+from .const import CONF_URL_WETTERONLINE, UPDATE_INTERVAL_WETTERONLINE
 from .coordinator import WeatherOnlineDataUpdateCoordinator
-
 from .wetteronline_api import WetterOnline
 
 _LOGGER = logging.getLogger(__name__)

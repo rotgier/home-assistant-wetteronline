@@ -10,13 +10,14 @@ from dataclasses import dataclass
 MIDNIGHT: Final = datetime.min.time()
 HTTP_HEADERS: dict[str, str] = {
     "Accept-Encoding": "gzip",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
 }
 
 
 @dataclass
 class WetterOnlineData:
     """Data from WetterOnline."""
+
     current_observations: dict[str, Any]
     daily_forecast: list[dict[str, Any]]
     hourly_forecast: list[dict[str, Any]]
@@ -27,72 +28,65 @@ class WetterOnline:
 
     def __init__(self, session: ClientSession, url: str) -> None:
         self._session = session
-        self._complete_url = f"https://www.wetteronline.de/{url}"
+        self.complete_url = f"https://www.wetteronline.de/{url}"
 
     async def async_get_weather(self) -> WetterOnlineData:
-        async with self._session.get(self._complete_url,
-                                     headers=HTTP_HEADERS,
-                                     allow_redirects= False) as resp:
+        async with self._session.get(
+            self.complete_url, headers=HTTP_HEADERS, allow_redirects=False
+        ) as resp:
             raw_html = html.unescape(await resp.text())
             weather_utils = WeatherUtils(raw_html)
             return WetterOnlineData(
                 current_observations=weather_utils.current_observations(),
                 daily_forecast=weather_utils.daily_forecast(),
-                hourly_forecast=weather_utils.hourly_forecast()
+                hourly_forecast=weather_utils.hourly_forecast(),
             )
 
 
 class WeatherUtils:
-
-    def __init__(self, raw_html = None):
+    def __init__(self, raw_html=None):
         """
         Initialize BeautifulSoup object with raw html.
         """
         self.soup = bs4.BeautifulSoup(raw_html, "lxml")
 
     def current_observations(self) -> dict[str, Any]:
-        """ Returns the current observations 4 day forecast of the given `url`. """
+        """Returns the current observations 4 day forecast of the given `url`."""
 
-        temperature = (self.soup
-                       .find("div", {"id": "nowcast-card-temperature"})
-                       .find("div", {"class":"value"})
-                       .text)
+        temperature = (
+            self.soup.find("div", {"id": "nowcast-card-temperature"})
+            .find("div", {"class": "value"})
+            .text
+        )
         temperature = int(temperature)
-        current_observations = {
-            "temperature": temperature
-        }
+        current_observations = {"temperature": temperature}
 
-        current_observations_raw = (self.soup
-               .find("div", {"id": "product_display"})
-               .find("script").text)
+        current_observations_raw = (
+            self.soup.find("div", {"id": "product_display"}).find("script").text
+        )
         for line in current_observations_raw.split("\n"):
             line = line.strip()
-            if (not line or
-                    line.startswith("WO") or
-                    line == "};"):
+            if not line or line.startswith("WO") or line == "};":
                 continue
-            clean = lambda arg: arg.strip().strip(',').strip('"')
-            [key, value] = map(clean,line.split(":"))
+            clean = lambda arg: arg.strip().strip(",").strip('"')
+            [key, value] = map(clean, line.split(":"))
             current_observations[key] = value
 
         return current_observations
 
-
     def hourly_forecast(self) -> list[dict[str, Any]]:
-        """ Returns the hourly forecast of the given `url` for today and tomorrow. """
+        """Returns the hourly forecast of the given `url` for today and tomorrow."""
 
         today = datetime.combine(datetime.today(), MIDNIGHT)
-        tomorrow = today + timedelta(days = 1)
+        tomorrow = today + timedelta(days=1)
 
-        scripts = (self.soup
-                   .find("div", {"id": "hourly-container"})
-                   .find_all("script"))
+        scripts = self.soup.find("div", {"id": "hourly-container"}).find_all("script")
         forecast: list[dict[str, Any]] = []
 
         replace_keys = {
             "windGusts": "windGustsBft",
             "windDirection": "windDirectionLong",
-            "windDirectionShortSector": "windDirection"
+            "windDirectionShortSector": "windDirection",
         }
         for script in scripts:
             script = str(script).split("({")[1].split("})")[0].strip().replace(" ", "")
@@ -107,24 +101,26 @@ class WeatherUtils:
             ## delete useless key
             hourly_data.pop("docrootVersion", None)
 
-            daySynonym = hourly_data['daySynonym']
+            daySynonym = hourly_data["daySynonym"]
             match daySynonym:
                 case "heute":
                     forecast_day = today
                 case "morgen":
                     forecast_day = tomorrow
                 case _:
-                    raise ValueError(f"daySynonym {daySynonym} is different than 'heute' and 'morgen'")
+                    raise ValueError(
+                        f"daySynonym {daySynonym} is different than 'heute' and 'morgen'"
+                    )
 
             hour = hourly_data.pop("hour")
-            hourly_data['datetime'] = forecast_day.replace(hour = hour)
+            hourly_data["datetime"] = forecast_day.replace(hour=hour)
 
             forecast.append(hourly_data)
 
         return forecast
 
     def daily_forecast(self) -> list[dict[str, Any]]:
-        """ Returns the full 4 day forecast of the given `url`. """
+        """Returns the full 4 day forecast of the given `url`."""
 
         ## get dates first
         forecast: list[dict[str, Any]] = []
@@ -136,20 +132,24 @@ class WeatherUtils:
                 if "," in list(date):
                     date = date.split(", ")[1]
                 date += str(datetime.now().year)
-                forecast_date = datetime.strptime(date, '%d.%m.%Y')
+                forecast_date = datetime.strptime(date, "%d.%m.%Y")
             else:
-                forecast_date = forecast_date + timedelta(days = 1)
-            forecast.append({'datetime': forecast_date})
+                forecast_date = forecast_date + timedelta(days=1)
+            forecast.append({"datetime": forecast_date})
 
         weather_table = self.soup.find("table", {"id": "weather"})
         # max temp
-        tags = list(weather_table.find("tr", {"class": "Maximum Temperature"}).find_all("div"))
+        tags = list(
+            weather_table.find("tr", {"class": "Maximum Temperature"}).find_all("div")
+        )
         for i in range(len(tags)):
             tag = tags[i].find_all("span")[1]
             forecast[i]["maxTemperature"] = int(str(tag.text).rstrip("°"))
 
         # min temp
-        tags = list(weather_table.find("tr", {"class": "Minimum Temperature"}).find_all("div"))
+        tags = list(
+            weather_table.find("tr", {"class": "Minimum Temperature"}).find_all("div")
+        )
         for i in range(len(tags)):
             tag = tags[i].find_all("span")[1]
             forecast[i]["minTemperature"] = int(str(tag.text).rstrip("°"))
@@ -161,9 +161,13 @@ class WeatherUtils:
             forecast[i]["sunHours"] = int(str(tag.text).lstrip().rstrip(" Std.\n"))
 
         # precipitation probability
-        tags = list(weather_table.find("tr", {"id": "precipitation_teaser"}).find_all("span"))
+        tags = list(
+            weather_table.find("tr", {"id": "precipitation_teaser"}).find_all("span")
+        )
         for i in range(len(tags)):
             tag = tags[i]
-            forecast[i]["precipitationProbability"] = int(str(tag.text).lstrip().rstrip(" %\n"))
+            forecast[i]["precipitationProbability"] = int(
+                str(tag.text).lstrip().rstrip(" %\n")
+            )
 
         return forecast

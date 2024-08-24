@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import cast
-
-from datetime import timezone
 
 from homeassistant.components.weather import (
     ATTR_FORECAST_CLOUD_COVERAGE,
@@ -20,39 +19,24 @@ from homeassistant.components.weather import (
     ATTR_FORECAST_TIME,
     ATTR_FORECAST_UV_INDEX,
     ATTR_FORECAST_WIND_BEARING,
-    CoordinatorWeatherEntity,
-    SingleCoordinatorWeatherEntity,
     Forecast,
+    SingleCoordinatorWeatherEntity,
     WeatherEntityFeature,
 )
 from homeassistant.const import (
+    CONF_NAME,
     UnitOfLength,
     UnitOfPrecipitationDepth,
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
 )
-from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util.dt import utc_from_timestamp
 
 from . import WetterOnlineConfigEntry
-
 from .const import SYMBOLTEXT_CONDITION_MAP
-
-
-# from .const import (
-#     API_METRIC,
-#     ATTR_DIRECTION,
-#     ATTR_SPEED,
-#     ATTR_VALUE,
-#     ATTRIBUTION,
-# )
-from .wetteronline_api import WetterOnline, WetterOnlineData
-
 from .coordinator import WeatherOnlineDataUpdateCoordinator
-
 
 PARALLEL_UPDATES = 1
 
@@ -106,9 +90,7 @@ class WetterOnlineEntity(
         """Return the daily forecast in native units."""
         return [
             {
-                ATTR_FORECAST_TIME: item["datetime"]
-                .astimezone(timezone.utc)
-                .isoformat(),
+                ATTR_FORECAST_TIME: item["datetime"].astimezone(UTC).isoformat(),
                 ATTR_FORECAST_NATIVE_TEMP: item["maxTemperature"],
                 ATTR_FORECAST_NATIVE_TEMP_LOW: item["minTemperature"],
                 ATTR_FORECAST_PRECIPITATION_PROBABILITY: item[
@@ -138,9 +120,7 @@ class WetterOnlineEntity(
         """Return the hourly forecast in native units."""
         return [
             {
-                ATTR_FORECAST_TIME: item["datetime"]
-                .astimezone(timezone.utc)
-                .isoformat(),
+                ATTR_FORECAST_TIME: item["datetime"].astimezone(UTC).isoformat(),
                 ATTR_FORECAST_CONDITION: _map_symbol_to_condition(item["symbolText"]),
                 ATTR_FORECAST_NATIVE_TEMP: item["temperature"],
                 ATTR_FORECAST_NATIVE_APPARENT_TEMP: item["apparentTemperature"],

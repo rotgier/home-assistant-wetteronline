@@ -1,11 +1,13 @@
-import bs4
-import ast
-import html
-from datetime import datetime, timedelta
-from typing import Final, Any
-from aiohttp import ClientSession
+"""API for fetching WetterOnline data."""
 
+import ast
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+import html
+from typing import Any, Final
+
+from aiohttp import ClientSession
+import bs4
 
 MIDNIGHT: Final = datetime.min.time()
 HTTP_HEADERS: dict[str, str] = {
@@ -28,7 +30,7 @@ class WetterOnline:
 
     def __init__(self, session: ClientSession, url: str) -> None:
         self._session = session
-        self.complete_url = f"https://www.wetteronline.de/{url}"
+        self.complete_url = f"https://www.wetteronline.de/{url}".replace("//", "/")
 
     async def async_get_weather(self) -> WetterOnlineData:
         async with self._session.get(

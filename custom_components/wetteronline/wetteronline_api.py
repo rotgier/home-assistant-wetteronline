@@ -149,30 +149,28 @@ class WeatherUtils:
         tags = list(
             weather_table.find("tr", {"class": "Maximum Temperature"}).find_all("div")
         )
-        for i in range(len(tags)):
-            tag = tags[i].find_all("span")[1]
-            forecast[i]["maxTemperature"] = int(str(tag.text).rstrip("°"))
+        for i, tag in enumerate(tags):
+            tag_span = tag.find_all("span")[1]
+            forecast[i]["maxTemperature"] = int(str(tag_span.text).rstrip("°"))
 
         # min temp
         tags = list(
             weather_table.find("tr", {"class": "Minimum Temperature"}).find_all("div")
         )
-        for i in range(len(tags)):
-            tag = tags[i].find_all("span")[1]
-            forecast[i]["minTemperature"] = int(str(tag.text).rstrip("°"))
+        for i, tag in enumerate(tags):
+            tag_span = tag.find_all("span")[1]
+            forecast[i]["minTemperature"] = int(str(tag_span.text).rstrip("°"))
 
         # sun hours
         tags = list(weather_table.find("tr", {"id": "sun_teaser"}).find_all("span"))
-        for i in range(len(tags)):
-            tag = tags[i]
+        for i, tag in enumerate(tags):
             forecast[i]["sunHours"] = int(str(tag.text).lstrip().rstrip(" Std.\n"))
 
         # precipitation probability
         tags = list(
             weather_table.find("tr", {"id": "precipitation_teaser"}).find_all("span")
         )
-        for i in range(len(tags)):
-            tag = tags[i]
+        for i, tag in enumerate(tags):
             forecast[i]["precipitationProbability"] = int(
                 str(tag.text).lstrip().rstrip(" %\n")
             )

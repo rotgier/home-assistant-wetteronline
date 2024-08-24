@@ -45,7 +45,7 @@ class WetterOnlineFlowHandler(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except Exception as e:
                 _LOGGER.exception()
-                errors["base"] = f"other_error: {str(e)}"
+                errors["base"] = f"other_error: {e!s}"
             else:
                 unique_id = user_input[CONF_NAME]
                 await self.async_set_unique_id(unique_id, raise_on_progress=False)

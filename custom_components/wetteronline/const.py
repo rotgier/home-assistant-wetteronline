@@ -24,6 +24,7 @@ from homeassistant.components.weather import (
 
 DOMAIN: Final = "wetteronline"
 
+# TODO add support for wind forecast
 # API_METRIC: Final = "Metric"
 # ATTRIBUTION: Final = "Data provided by WetterOnline"
 # ATTR_CATEGORY: Final = "Category"

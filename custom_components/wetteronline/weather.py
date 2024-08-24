@@ -32,6 +32,7 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
+from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import utc_from_timestamp
@@ -39,6 +40,7 @@ from homeassistant.util.dt import utc_from_timestamp
 from . import WetterOnlineConfigEntry
 
 from .const import SYMBOLTEXT_CONDITION_MAP
+
 
 # from .const import (
 #     API_METRIC,
@@ -61,15 +63,17 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Add a WetterOnline weather entity from a config_entry."""
-    async_add_entities([WetterOnlineEntity(entry.runtime_data)])
+    async_add_entities([WetterOnlineEntity(entry.runtime_data, entry.data[CONF_NAME])])
 
 
 class WetterOnlineEntity(
-    SingleCoordinatorWeatherEntity[WeatherOnlineDataUpdateCoordinator,]
+    SingleCoordinatorWeatherEntity[WeatherOnlineDataUpdateCoordinator]
 ):
     """Define an WetterOnline entity."""
 
-    def __init__(self, coordinator: WeatherOnlineDataUpdateCoordinator) -> None:
+    def __init__(
+        self, coordinator: WeatherOnlineDataUpdateCoordinator, name: str
+    ) -> None:
         """Initialize."""
         super().__init__(coordinator)
 
@@ -78,7 +82,8 @@ class WetterOnlineEntity(
         self._attr_native_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_native_visibility_unit = UnitOfLength.KILOMETERS
         self._attr_native_wind_speed_unit = UnitOfSpeed.KILOMETERS_PER_HOUR
-        # self._attr_unique_id = coordinator_observation.location_key
+        self._attr_unique_id = name
+        self._attr_device_info = coordinator.device_info
         self._attr_supported_features = (
             WeatherEntityFeature.FORECAST_DAILY | WeatherEntityFeature.FORECAST_HOURLY
         )

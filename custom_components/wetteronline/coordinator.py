@@ -18,14 +18,12 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import DOMAIN
 
-#EXCEPTIONS = (ApiError, ClientConnectorError, InvalidApiKeyError, RequestsExceededError)
+# EXCEPTIONS = (ApiError, ClientConnectorError, InvalidApiKeyError, RequestsExceededError)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class WeatherOnlineDataUpdateCoordinator(
-    DataUpdateCoordinator[WetterOnlineData]
-):
+class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]):
     """Class to manage fetching WetterOnline data."""
 
     def __init__(
@@ -37,12 +35,18 @@ class WeatherOnlineDataUpdateCoordinator(
     ) -> None:
         """Initialize."""
         self.wetteronline = wetteronline
-        #self.location_key = wetteronline.location_key
+        # self.location_key = wetteronline.location_key
 
-        #if TYPE_CHECKING:
+        # if TYPE_CHECKING:
         #    assert self.location_key is not None
 
-        #self.device_info = _get_device_info(self.location_key, name)
+        self.device_info = DeviceInfo(
+            entry_type=DeviceEntryType.SERVICE,
+            identifiers={(DOMAIN, name)},
+            manufacturer="wetteronline.de",
+            name=name,
+            configuration_url=wetteronline.complete_url,
+        )
 
         super().__init__(
             hass,

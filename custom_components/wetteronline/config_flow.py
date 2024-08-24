@@ -41,10 +41,10 @@ class WetterOnlineFlowHandler(ConfigFlow, domain=DOMAIN):
                     await wetteronline.async_get_weather()
 
             except (ClientConnectorError, TimeoutError, ClientError):
-                _LOGGER.exception()
+                _LOGGER.exception("Cannot connect")
                 errors["base"] = "cannot_connect"
             except Exception as e:
-                _LOGGER.exception()
+                _LOGGER.exception("Error occured")
                 errors["base"] = f"other_error: {e!s}"
             else:
                 unique_id = user_input[CONF_NAME]

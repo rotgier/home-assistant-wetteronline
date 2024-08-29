@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import html
 from typing import Any, Final
+from zoneinfo import ZoneInfo
 
 from aiohttp import ClientSession
 import bs4
@@ -51,6 +52,7 @@ class WeatherUtils:
     """Logic for extraction weather data from raw html."""
 
     def __init__(self, raw_html=None) -> None:  # noqa: D107
+        self.timezone = None
         self.soup = bs4.BeautifulSoup(raw_html, "lxml")
 
     def current_observations(self) -> dict[str, Any]:
@@ -73,6 +75,10 @@ class WeatherUtils:
 
         for line in current_observations_raw.split("\n"):
             line = line.strip()
+            if "timeZone" in line:
+                timezone = line.split("=")[1].strip()
+                timezone = timezone.strip('";')
+                self.timezone = ZoneInfo(timezone)
             if not line or line.startswith("WO") or line == "};":
                 continue
 
@@ -84,7 +90,7 @@ class WeatherUtils:
     def hourly_forecast(self) -> list[dict[str, Any]]:
         """Return the hourly forecast of the given `url` for today and tomorrow."""
 
-        today = datetime.combine(datetime.today(), MIDNIGHT)
+        today = datetime.combine(datetime.now(), MIDNIGHT, self.timezone)
         tomorrow = today + timedelta(days=1)
 
         scripts = self.soup.find("div", {"id": "hourly-container"}).find_all("script")
@@ -140,6 +146,7 @@ class WeatherUtils:
                     date = date.split(", ")[1]
                 date += str(datetime.now().year)
                 forecast_date = datetime.strptime(date, "%d.%m.%Y")
+                forecast_date = datetime.combine(forecast_date, MIDNIGHT, self.timezone)
             else:
                 forecast_date = forecast_date + timedelta(days=1)
             forecast.append({"datetime": forecast_date})

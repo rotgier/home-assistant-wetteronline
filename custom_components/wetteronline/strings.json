@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "name": "[%key:common::config_flow::data::name%]",
+          "url_wetteronline": "Your URL from wetteronline.de e.g. /wetter/warschau or /?gid=12415&lat=51.04&locationname=Piekary&lon=16.43&pcid=pc_city_weather&pid=p_city_weather"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "other_error": "Some other error occurred. See the logs"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+    "config": {
+        "error": {
+            "cannot_connect": "Failed to connect",
+            "other_error": "Some other error occurred. See the logs"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "name": "Name",
+                    "url_wetteronline": "Your URL from wetteronline.de e.g. /wetter/warschau or /?gid=12415&lat=51.04&locationname=Piekary&lon=16.43&pcid=pc_city_weather&pid=p_city_weather"
+                }
+            }
+        }
+    }
+}

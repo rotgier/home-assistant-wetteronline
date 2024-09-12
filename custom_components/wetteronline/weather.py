@@ -128,6 +128,8 @@ class WetterOnlineEntity(
                 ATTR_FORECAST_NATIVE_TEMP: item["temperature"],
                 ATTR_FORECAST_NATIVE_APPARENT_TEMP: item["apparentTemperature"],
                 ATTR_FORECAST_HUMIDITY: item["humidity"],
+                "symbol": item["symbol"],
+                "symbolText": item["symbolText"],
                 # ATTR_FORECAST_CLOUD_COVERAGE: item["CloudCover"],
                 # ATTR_FORECAST_NATIVE_PRECIPITATION: item["TotalLiquid"][ATTR_VALUE],
                 # ATTR_FORECAST_PRECIPITATION_PROBABILITY: item[

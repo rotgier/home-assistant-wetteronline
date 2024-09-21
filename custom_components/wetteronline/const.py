@@ -55,7 +55,7 @@ SYMBOLTEXT_CONDITION_MAP: Final[dict[str, str]] = {
     "mo____": ATTR_CONDITION_CLEAR_NIGHT,
     "klar": ATTR_CONDITION_CLEAR_NIGHT,
     "stark bewölkt": ATTR_CONDITION_CLOUDY,  # clouds (ciemne chmury)
-    "md____": ATTR_CONDITION_CLOUDY,  # clouds (ciemne chmury) zaczyna się od m jak "moon" - noc
+    "md____": ATTR_CONDITION_CLOUDY,  # clouds (ciemne chmury) zaczyna się od m jak "moon" - noc
     "teils Nebel, teils Sonne": ATTR_CONDITION_FOG
     + "_partly",  # trochę słońca trochę mgły
     "ns____": ATTR_CONDITION_FOG + "_partly",  # trochę słońca trochę mgły
@@ -63,6 +63,6 @@ SYMBOLTEXT_CONDITION_MAP: Final[dict[str, str]] = {
     "nb____": ATTR_CONDITION_FOG,  # mgła
 }
 
-UPDATE_INTERVAL_WETTERONLINE = timedelta(minutes=1)
+UPDATE_INTERVAL_WETTERONLINE = timedelta(minutes=15)
 
 CONF_URL_WETTERONLINE: Final = "url_wetteronline"

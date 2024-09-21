@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC
-from typing import cast
+from typing import Any, cast
 
 from homeassistant.components.weather import (
     ATTR_FORECAST_CLOUD_COVERAGE,
@@ -35,7 +35,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import WetterOnlineConfigEntry
-from .const import SYMBOLTEXT_CONDITION_MAP
+from .const import (
+    ATTR_CONDITION_UNKNOWN,
+    ATTR_FORECAST_CONDITION_CUSTOM,
+    ATTR_FORECAST_CONDITION_SYMBOL,
+    ATTR_FORECAST_CONDITION_SYMBOLTEXT,
+    ATTR_FORECAST_SYMBOL,
+    ATTR_FORECAST_SYMBOLTEXT,
+    SYMBOLTEXT_CONDITION_CUSTOM_MAP,
+    SYMBOLTEXT_CONDITION_MAP,
+)
 from .coordinator import WeatherOnlineDataUpdateCoordinator
 
 PARALLEL_UPDATES = 1
@@ -122,28 +131,55 @@ class WetterOnlineEntity(
     def _async_forecast_hourly(self) -> list[Forecast] | None:
         """Return the hourly forecast in native units."""
         return [
-            {
-                ATTR_FORECAST_TIME: item["datetime"].astimezone(UTC).isoformat(),
-                ATTR_FORECAST_CONDITION: _map_symbol_to_condition(item["symbolText"]),
-                ATTR_FORECAST_NATIVE_TEMP: item["temperature"],
-                ATTR_FORECAST_NATIVE_APPARENT_TEMP: item["apparentTemperature"],
-                ATTR_FORECAST_HUMIDITY: item["humidity"],
-                "symbol": item["symbol"],
-                "symbolText": item["symbolText"],
-                # ATTR_FORECAST_CLOUD_COVERAGE: item["CloudCover"],
-                # ATTR_FORECAST_NATIVE_PRECIPITATION: item["TotalLiquid"][ATTR_VALUE],
-                # ATTR_FORECAST_PRECIPITATION_PROBABILITY: item[
-                #     "PrecipitationProbability"
-                # ],
-                # ATTR_FORECAST_NATIVE_WIND_SPEED: item["Wind"][ATTR_SPEED][ATTR_VALUE],
-                # ATTR_FORECAST_NATIVE_WIND_GUST_SPEED: item["WindGust"][ATTR_SPEED][
-                #     ATTR_VALUE
-                # ],
-                # ATTR_FORECAST_UV_INDEX: item["UVIndex"],
-                # ATTR_FORECAST_WIND_BEARING: item["Wind"][ATTR_DIRECTION]["Degrees"],
-            }
+            self._hourly_forecast_item(item)
             for item in self.coordinator.data.hourly_forecast
         ]
+
+    def _hourly_forecast_item(self, item: dict[str, Any]) -> Forecast:
+        symbol = item["symbol"]
+        symbol_text = item["symbolText"]
+        forecast = {
+            ATTR_FORECAST_TIME: item["datetime"].astimezone(UTC).isoformat(),
+            ATTR_FORECAST_NATIVE_TEMP: item["temperature"],
+            ATTR_FORECAST_NATIVE_APPARENT_TEMP: item["apparentTemperature"],
+            ATTR_FORECAST_HUMIDITY: item["humidity"],
+            ATTR_FORECAST_SYMBOL: symbol,
+            ATTR_FORECAST_SYMBOLTEXT: symbol_text,
+        }
+        self._set_condition(forecast, symbol, symbol_text)
+        self._set_custom_condition(forecast, symbol, symbol_text)
+        return forecast
+
+    def _set_condition(self, forecast, symbol, symbol_text):
+        mapped_symbol = SYMBOLTEXT_CONDITION_MAP[symbol]
+        mapped_symbol_text = SYMBOLTEXT_CONDITION_MAP[symbol_text]
+        condition = symbol
+        if mapped_symbol:
+            condition = mapped_symbol
+        elif mapped_symbol_text:
+            condition = mapped_symbol_text
+        forecast[ATTR_FORECAST_CONDITION] = condition
+
+    def _set_custom_condition(self, forecast: Forecast, symbol: str, symbol_text: str):
+        mapped_symbol = SYMBOLTEXT_CONDITION_CUSTOM_MAP[symbol]
+        mapped_symbol_text = SYMBOLTEXT_CONDITION_CUSTOM_MAP[symbol_text]
+        if mapped_symbol and mapped_symbol_text:
+            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = mapped_symbol
+            if mapped_symbol != mapped_symbol_text:
+                forecast[ATTR_FORECAST_CONDITION_SYMBOL] = mapped_symbol
+                forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = mapped_symbol_text
+        elif mapped_symbol:
+            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = mapped_symbol
+            forecast[ATTR_FORECAST_CONDITION_SYMBOL] = mapped_symbol
+            forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = ATTR_CONDITION_UNKNOWN
+        elif mapped_symbol_text:
+            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = mapped_symbol_text
+            forecast[ATTR_FORECAST_CONDITION_SYMBOL] = ATTR_CONDITION_UNKNOWN
+            forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = mapped_symbol_text
+        else:
+            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = symbol
+            forecast[ATTR_FORECAST_CONDITION_SYMBOL] = ATTR_CONDITION_UNKNOWN
+            forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = ATTR_CONDITION_UNKNOWN
 
 
 def _map_symbol_to_condition(symbol: str) -> str:

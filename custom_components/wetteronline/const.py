@@ -54,58 +54,111 @@ ATTR_CONDITION_UNKNOWN: Final = "UNKNOWN"
 
 
 SYMBOLTEXT_CONDITION_MAP: Final[dict[str, str]] = {
-    "sonnig": ATTR_CONDITION_SUNNY,
     "so____": ATTR_CONDITION_SUNNY,
-    "Gewitter": ATTR_CONDITION_LIGHTNING_RAINY,
+    "mo____": ATTR_CONDITION_CLEAR_NIGHT,
+    "sonnig": ATTR_CONDITION_SUNNY,
+    "klar": ATTR_CONDITION_CLEAR_NIGHT,
+    ###############################################
     "wb____": ATTR_CONDITION_EXCEPTIONAL,
+    "mb____": ATTR_CONDITION_EXCEPTIONAL,  # same as "wb_" but at night
     "wechselnd bewölkt": ATTR_CONDITION_EXCEPTIONAL,
     "wechselndbewölkt": ATTR_CONDITION_EXCEPTIONAL,
-    "mb____": ATTR_CONDITION_EXCEPTIONAL,  # same as "wb_" but at night
+    ###############################################
     "bw____": ATTR_CONDITION_PARTLYCLOUDY,
+    "mw____": ATTR_CONDITION_PARTLYCLOUDY,
     "bewölkt": ATTR_CONDITION_PARTLYCLOUDY,
-    "bws1__": ATTR_CONDITION_RAINY,  # light showers
-    "bws2__": ATTR_CONDITION_RAINY,  # showers
-    "bws3__": ATTR_CONDITION_RAINY,  # heavy showers
-    "bwr1__": ATTR_CONDITION_POURING,  # light rain
-    "bwr2__": ATTR_CONDITION_POURING,  # rain
-    "bwr3__": ATTR_CONDITION_POURING,  # heavy rain
+    ###############################################
+    "bws1__": ATTR_CONDITION_RAINY,  # light showers WITH sun
+    "bws2__": ATTR_CONDITION_RAINY,  # showers WITH sun
+    "bws3__": ATTR_CONDITION_RAINY,  # heavy showers WITH sun
+    "bds1__": ATTR_CONDITION_RAINY,  # light showers without sun
+    "bds2__": ATTR_CONDITION_RAINY,  # showers without sun
+    "bds3__": ATTR_CONDITION_RAINY,  # heavy showers without sun
+    #########
+    "mws1__": ATTR_CONDITION_RAINY,  # light showers WITH moon
+    "mws2__": ATTR_CONDITION_RAINY,  # showers WITH moon
+    "mws3__": ATTR_CONDITION_RAINY,  # heavy showers WITH moon
+    "mds1__": ATTR_CONDITION_RAINY,  # light showers without moon
+    "mds2__": ATTR_CONDITION_RAINY,  # showers without moon
+    "mds3__": ATTR_CONDITION_RAINY,  # heavy showers without moon
+    #########
     "Schauer": ATTR_CONDITION_RAINY,
-    "mo____": ATTR_CONDITION_CLEAR_NIGHT,
-    "klar": ATTR_CONDITION_CLEAR_NIGHT,
-    "stark bewölkt": ATTR_CONDITION_CLOUDY,  # clouds (ciemne chmury)
-    "md____": ATTR_CONDITION_CLOUDY,  # clouds (ciemne chmury) zaczyna się od m jak "moon" - noc
-    "teils Nebel, teils Sonne": ATTR_CONDITION_FOG,  # trochę słońca i mgły
-    "ns____": ATTR_CONDITION_FOG,  # trochę słońca trochę mgły
-    "Nebel": ATTR_CONDITION_FOG,  # mgła
-    "nb____": ATTR_CONDITION_FOG,  # mgła
+    ###############################################
+    "bwr1__": ATTR_CONDITION_POURING,  # light rain WITH sun
+    "bwr2__": ATTR_CONDITION_POURING,  # rain WITH sun
+    "bwr3__": ATTR_CONDITION_POURING,  # heavy rain WITH sun
+    "bdr1__": ATTR_CONDITION_POURING,  # light rain without sun
+    "bdr2__": ATTR_CONDITION_POURING,  # rain without sun
+    "bdr3__": ATTR_CONDITION_POURING,  # heavy rain without sun
+    #########
+    "mwr1__": ATTR_CONDITION_POURING,  # light rain WITH moon
+    "mwr2__": ATTR_CONDITION_POURING,  # rain WITH moon
+    "mwr3__": ATTR_CONDITION_POURING,  # heavy rain WITH moon
+    "mdr1__": ATTR_CONDITION_POURING,  # light rain without moon
+    "mdr2__": ATTR_CONDITION_POURING,  # rain without moon
+    "mdr3__": ATTR_CONDITION_POURING,  # heavy rain without moon
+    #########
+    "Regen": ATTR_CONDITION_POURING,
+    "leichterRegen": ATTR_CONDITION_POURING,
+    ###############################################
+    "bd____": ATTR_CONDITION_CLOUDY,  # clouds during day
+    "md____": ATTR_CONDITION_CLOUDY,  # clouds same as "md_" but at night
+    "stark bewölkt": ATTR_CONDITION_CLOUDY,  # clouds
+    "starkbewölkt": ATTR_CONDITION_CLOUDY,  # clouds
+    ###############################################
+    "Gewitter": ATTR_CONDITION_LIGHTNING_RAINY,
+    ###############################################
+    "ns____": ATTR_CONDITION_FOG,  # partly foggy
+    "teils Nebel, teils Sonne": ATTR_CONDITION_FOG,  # partly foggy
+    "nb____": ATTR_CONDITION_FOG,
+    "Nebel": ATTR_CONDITION_FOG,
 }
 
-SYMBOLTEXT_CONDITION_CUSTOM_MAP: Final[dict[str, str]] = {
-    "sonnig": ATTR_CONDITION_SUNNY,
-    "so____": ATTR_CONDITION_SUNNY,
-    "Gewitter": ATTR_CONDITION_LIGHTNING_RAINY,
-    "wb____": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
-    "wechselnd bewölkt": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
-    "wechselndbewölkt": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
-    "mb____": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,  # same as "wb_" but at night
-    "bw____": ATTR_CONDITION_PARTLYCLOUDY,
-    "bewölkt": ATTR_CONDITION_PARTLYCLOUDY,
-    "bws1__": ATTR_CONDITION_RAINY_LIGHT,  # light showers
-    "bws2__": ATTR_CONDITION_RAINY,  # showers
-    "bws3__": ATTR_CONDITION_RAINY_HEAVY,  # heavy showers
-    "Schauer": ATTR_CONDITION_RAINY,
-    "bwr1__": ATTR_CONDITION_POURING_LIGHT,  # light rain
-    "bwr2__": ATTR_CONDITION_POURING,  # rain
-    "bwr3__": ATTR_CONDITION_POURING_HEAVY,  # heavy rain
-    "mo____": ATTR_CONDITION_CLEAR_NIGHT,
-    "klar": ATTR_CONDITION_CLEAR_NIGHT,
-    "stark bewölkt": ATTR_CONDITION_CLOUDY,  # clouds (ciemne chmury)
-    "md____": ATTR_CONDITION_CLOUDY,  # clouds (ciemne chmury) zaczyna się od m jak "moon" - noc
-    "teils Nebel, teils Sonne": ATTR_CONDITION_FOG_PARTLY,  # trochę słońca i mgły
-    "ns____": ATTR_CONDITION_FOG_PARTLY,  # trochę słońca trochę mgły
-    "Nebel": ATTR_CONDITION_FOG,  # mgła
-    "nb____": ATTR_CONDITION_FOG,  # mgła
-}
+SYMBOLTEXT_CONDITION_CUSTOM_MAP: Final[dict[str, str]] = SYMBOLTEXT_CONDITION_MAP.copy()
+
+SYMBOLTEXT_CONDITION_CUSTOM_MAP.update(
+    {
+        "wb____": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
+        "mb____": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,  # same as "wb_" but at night
+        "wechselnd bewölkt": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
+        "wechselndbewölkt": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
+        ###############################################
+        # TODO differentiate WITH and without sun
+        "bws1__": ATTR_CONDITION_RAINY_LIGHT + "-partlycloudy",
+        "bws2__": ATTR_CONDITION_RAINY + "-partlycloudy",
+        "bws3__": ATTR_CONDITION_RAINY_HEAVY + "-partlycloudy",
+        "bds1__": ATTR_CONDITION_RAINY_LIGHT,  # light showers without sun
+        "bds2__": ATTR_CONDITION_RAINY,  # showers without sun
+        "bds3__": ATTR_CONDITION_RAINY_HEAVY,  # heavy showers without sun
+        #########
+        "mws1__": ATTR_CONDITION_RAINY_LIGHT + "-partlycloudy",
+        "mws2__": ATTR_CONDITION_RAINY + "-partlycloudy",
+        "mws3__": ATTR_CONDITION_RAINY_HEAVY + "-partlycloudy",
+        "mds1__": ATTR_CONDITION_RAINY_LIGHT,  # light showers without moon
+        "mds2__": ATTR_CONDITION_RAINY,  # showers without moon
+        "mds3__": ATTR_CONDITION_RAINY_HEAVY,  # heavy showers without moon
+        ###############################################
+        # TODO differentiate WITH and without sun
+        "bwr1__": ATTR_CONDITION_POURING_LIGHT + "-partlycloudy",
+        "bwr2__": ATTR_CONDITION_POURING + "-partlycloudy",
+        "bwr3__": ATTR_CONDITION_POURING_HEAVY + "-partlycloudy",
+        "bdr1__": ATTR_CONDITION_POURING_LIGHT,  # light rain without sun
+        "bdr2__": ATTR_CONDITION_POURING,  # rain without sun
+        "bdr3__": ATTR_CONDITION_POURING_HEAVY,  # heavy rain without sun
+        #########
+        "mwr1__": ATTR_CONDITION_POURING_LIGHT + "-partlycloudy",
+        "mwr2__": ATTR_CONDITION_POURING + "-partlycloudy",
+        "mwr3__": ATTR_CONDITION_POURING_HEAVY + "-partlycloudy",
+        "mdr1__": ATTR_CONDITION_POURING_LIGHT,  # light rain without moon
+        "mdr2__": ATTR_CONDITION_POURING,  # rain without moon
+        "mdr3__": ATTR_CONDITION_POURING_HEAVY,  # heavy rain without moon
+        #########
+        "leichterRegen": ATTR_CONDITION_POURING_LIGHT,
+        ###############################################
+        "ns____": ATTR_CONDITION_FOG_PARTLY,  # trochę słońca trochę mgły
+        "teils Nebel, teils Sonne": ATTR_CONDITION_FOG_PARTLY,  # trochę słońca i mgły
+    }
+)
 
 UPDATE_INTERVAL_WETTERONLINE = timedelta(minutes=15)
 

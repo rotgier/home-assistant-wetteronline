@@ -4,6 +4,7 @@ import ast
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import html
+import logging
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
@@ -15,6 +16,8 @@ HTTP_HEADERS: dict[str, str] = {
     "Accept-Encoding": "gzip",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
 }
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -90,7 +93,8 @@ class WeatherUtils:
     def hourly_forecast(self) -> list[dict[str, Any]]:
         """Return the hourly forecast of the given `url` for today and tomorrow."""
 
-        today = datetime.combine(datetime.now(), MIDNIGHT, self.timezone)
+        now_tz = datetime.now(tz=self.timezone)
+        today = datetime.combine(now_tz, MIDNIGHT, self.timezone)
         tomorrow = today + timedelta(days=1)
 
         scripts = self.soup.find("div", {"id": "hourly-container"}).find_all("script")
@@ -101,6 +105,7 @@ class WeatherUtils:
             "windDirection": "windDirectionLong",
             "windDirectionShortSector": "windDirection",
         }
+        previous_hour: datetime = None
         for script in scripts:
             script = str(script).split("({")[1].split("})")[0].strip().replace(" ", "")
             hourly_data_raw = []
@@ -126,7 +131,19 @@ class WeatherUtils:
                     )
 
             hour = hourly_data.pop("hour")
-            hourly_data["datetime"] = forecast_day.replace(hour=hour)
+            current_hour = forecast_day.replace(hour=hour)
+            if previous_hour:
+                expected_next_hour = previous_hour + timedelta(hours=1)
+                if current_hour != expected_next_hour:
+                    _LOGGER.warning(
+                        "Whoa current_hour %s != expected_next_hour %s assuming expected",
+                        current_hour,
+                        expected_next_hour,
+                    )
+                    current_hour = expected_next_hour
+
+            hourly_data["datetime"] = current_hour
+            previous_hour = current_hour
 
             forecast.append(hourly_data)
 

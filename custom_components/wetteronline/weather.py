@@ -224,14 +224,16 @@ class WetterOnlineEntity(
             if hourly_forecast != last_hourly_forecast:
                 self._save_forecast_to_file(now)
         elif len_difference > 0:
-            assert (
+            if (
                 last_hourly_forecast[len_difference][ATTR_FORECAST_TIME]
                 == hourly_forecast[0][ATTR_FORECAST_TIME]
-            )
-            assert (
+            ):
+                _LOGGER.warning("First element datetime does not match!")
+            if (
                 last_hourly_forecast[len_difference + 1][ATTR_FORECAST_TIME]
                 == hourly_forecast[1][ATTR_FORECAST_TIME]
-            )
+            ):
+                _LOGGER.warning("Second element datetime does not match!")
             if hourly_forecast != last_hourly_forecast[len_difference:]:
                 _LOGGER.warning("New smaller hourly_forecast differs. Saving it")
                 self._save_forecast_to_file(now)

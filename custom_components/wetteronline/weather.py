@@ -145,7 +145,7 @@ class WetterOnlineEntity(
         symbol = item["symbol"]
         symbol_text = item["symbolText"]
         forecast = {
-            ATTR_FORECAST_TIME: item["datetime"].astimezone(UTC).isoformat(),
+            ATTR_FORECAST_TIME: item["datetime"].isoformat(),
             ATTR_FORECAST_NATIVE_TEMP: item["temperature"],
             ATTR_FORECAST_NATIVE_APPARENT_TEMP: item["apparentTemperature"],
             ATTR_FORECAST_HUMIDITY: item["humidity"],
@@ -158,12 +158,7 @@ class WetterOnlineEntity(
 
     def _set_condition(self, forecast, symbol, symbol_text):
         mapped_symbol = SYMBOLTEXT_CONDITION_MAP.get(symbol)
-        mapped_symbol_text = SYMBOLTEXT_CONDITION_MAP.get(symbol_text)
-        condition = symbol
-        if mapped_symbol:
-            condition = mapped_symbol
-        elif mapped_symbol_text:
-            condition = mapped_symbol_text
+        condition = mapped_symbol if mapped_symbol else symbol
         forecast[ATTR_FORECAST_CONDITION] = condition
 
     def _set_custom_condition(self, forecast: Forecast, symbol: str, symbol_text: str):
@@ -179,7 +174,7 @@ class WetterOnlineEntity(
             forecast[ATTR_FORECAST_CONDITION_SYMBOL] = mapped_symbol
             forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = ATTR_CONDITION_UNKNOWN
         elif mapped_symbol_text:
-            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = mapped_symbol_text
+            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = symbol
             forecast[ATTR_FORECAST_CONDITION_SYMBOL] = ATTR_CONDITION_UNKNOWN
             forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = mapped_symbol_text
         else:

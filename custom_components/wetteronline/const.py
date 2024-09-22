@@ -60,6 +60,7 @@ SYMBOLTEXT_CONDITION_MAP: Final[dict[str, str]] = {
     "wb____": ATTR_CONDITION_EXCEPTIONAL,
     "wechselnd bewölkt": ATTR_CONDITION_EXCEPTIONAL,
     "wechselndbewölkt": ATTR_CONDITION_EXCEPTIONAL,
+    "mb____": ATTR_CONDITION_EXCEPTIONAL,  # same as "wb_" but at night
     "bw____": ATTR_CONDITION_PARTLYCLOUDY,
     "bewölkt": ATTR_CONDITION_PARTLYCLOUDY,
     "bws1__": ATTR_CONDITION_RAINY,  # light showers
@@ -86,6 +87,7 @@ SYMBOLTEXT_CONDITION_CUSTOM_MAP: Final[dict[str, str]] = {
     "wb____": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
     "wechselnd bewölkt": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
     "wechselndbewölkt": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,
+    "mb____": ATTR_CONDITION_PARTLYCLOUDY_VARIABLE,  # same as "wb_" but at night
     "bw____": ATTR_CONDITION_PARTLYCLOUDY,
     "bewölkt": ATTR_CONDITION_PARTLYCLOUDY,
     "bws1__": ATTR_CONDITION_RAINY_LIGHT,  # light showers

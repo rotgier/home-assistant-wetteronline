@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, date, datetime
+import logging
 from typing import Any, cast
 
 from homeassistant.components.weather import (
@@ -33,6 +34,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util.dt import now as now_local
 
 from . import WetterOnlineConfigEntry
 from .const import (
@@ -48,6 +50,8 @@ from .const import (
 from .coordinator import WeatherOnlineDataUpdateCoordinator
 
 PARALLEL_UPDATES = 1
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -84,6 +88,8 @@ class WetterOnlineEntity(
             WeatherEntityFeature.FORECAST_DAILY | WeatherEntityFeature.FORECAST_HOURLY
         )
         self.coordinator: WeatherOnlineDataUpdateCoordinator = coordinator
+        self._last_hourly_forecast: list[Forecast] = None
+        self._last_hourly_forecast_day: date = None
 
     @property
     def condition(self) -> str | None:
@@ -151,8 +157,8 @@ class WetterOnlineEntity(
         return forecast
 
     def _set_condition(self, forecast, symbol, symbol_text):
-        mapped_symbol = SYMBOLTEXT_CONDITION_MAP[symbol]
-        mapped_symbol_text = SYMBOLTEXT_CONDITION_MAP[symbol_text]
+        mapped_symbol = SYMBOLTEXT_CONDITION_MAP.get(symbol)
+        mapped_symbol_text = SYMBOLTEXT_CONDITION_MAP.get(symbol_text)
         condition = symbol
         if mapped_symbol:
             condition = mapped_symbol
@@ -161,8 +167,8 @@ class WetterOnlineEntity(
         forecast[ATTR_FORECAST_CONDITION] = condition
 
     def _set_custom_condition(self, forecast: Forecast, symbol: str, symbol_text: str):
-        mapped_symbol = SYMBOLTEXT_CONDITION_CUSTOM_MAP[symbol]
-        mapped_symbol_text = SYMBOLTEXT_CONDITION_CUSTOM_MAP[symbol_text]
+        mapped_symbol = SYMBOLTEXT_CONDITION_CUSTOM_MAP.get(symbol)
+        mapped_symbol_text = SYMBOLTEXT_CONDITION_CUSTOM_MAP.get(symbol_text)
         if mapped_symbol and mapped_symbol_text:
             forecast[ATTR_FORECAST_CONDITION_CUSTOM] = mapped_symbol
             if mapped_symbol != mapped_symbol_text:
@@ -180,6 +186,63 @@ class WetterOnlineEntity(
             forecast[ATTR_FORECAST_CONDITION_CUSTOM] = symbol
             forecast[ATTR_FORECAST_CONDITION_SYMBOL] = ATTR_CONDITION_UNKNOWN
             forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = ATTR_CONDITION_UNKNOWN
+
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        now = now_local()
+        super()._handle_coordinator_update()
+        hourly_forecast_raw = self.coordinator.data.hourly_forecast
+        if not hourly_forecast_raw:
+            return
+
+        hourly_forecast_first_hour: datetime = hourly_forecast_raw[0]["datetime"]
+        hourly_forecast_day: date = hourly_forecast_first_hour.date()
+        if not self._last_hourly_forecast:
+            self._last_hourly_forecast = self._async_forecast_hourly()
+            self._last_hourly_forecast_day = hourly_forecast_day
+            self._save_forecast_to_file(now)
+            return
+
+        assert self._last_hourly_forecast_day
+        if hourly_forecast_day != self._last_hourly_forecast_day:
+            self._last_hourly_forecast = self._async_forecast_hourly()
+            self._last_hourly_forecast_day = hourly_forecast_day
+            self._save_forecast_to_file(now)
+            return
+
+        hourly_forecast = self._async_forecast_hourly()
+        last_hourly_forecast = self._last_hourly_forecast
+        len_difference = len(last_hourly_forecast) - len(hourly_forecast)
+
+        if len_difference == 0:
+            if hourly_forecast != last_hourly_forecast:
+                self._save_forecast_to_file(now)
+        elif len_difference > 0:
+            assert (
+                last_hourly_forecast[len_difference][ATTR_FORECAST_TIME]
+                == hourly_forecast[0][ATTR_FORECAST_TIME]
+            )
+            assert (
+                last_hourly_forecast[len_difference + 1][ATTR_FORECAST_TIME]
+                == hourly_forecast[1][ATTR_FORECAST_TIME]
+            )
+            if hourly_forecast != last_hourly_forecast[len_difference:]:
+                _LOGGER.warning("New smaller hourly_forecast differs. Saving it")
+                self._save_forecast_to_file(now)
+            else:
+                _LOGGER.warning("New smaller hourly_forecast is the same")
+        else:
+            _LOGGER.warning("Negative len_difference: {len_difference}")
+            self._save_forecast_to_file(now)
+
+    def _save_forecast_to_file(self, now: datetime) -> None:
+        _LOGGER.debug("_save_forecast_to_file")
 
 
 def _map_symbol_to_condition(symbol: str) -> str:

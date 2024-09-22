@@ -222,6 +222,8 @@ class WetterOnlineEntity(
 
         if len_difference == 0:
             if hourly_forecast != last_hourly_forecast:
+                self._last_hourly_forecast = self._async_forecast_hourly()
+                self._last_hourly_forecast_day = hourly_forecast_day
                 self._save_forecast_to_file(now)
         elif len_difference > 0:
             if (
@@ -236,11 +238,15 @@ class WetterOnlineEntity(
                 _LOGGER.warning("Second element datetime does not match!")
             if hourly_forecast != last_hourly_forecast[len_difference:]:
                 _LOGGER.warning("New smaller hourly_forecast differs. Saving it")
+                self._last_hourly_forecast = self._async_forecast_hourly()
+                self._last_hourly_forecast_day = hourly_forecast_day
                 self._save_forecast_to_file(now)
             else:
                 _LOGGER.warning("New smaller hourly_forecast is the same")
         else:
             _LOGGER.warning("Negative len_difference: {len_difference}")
+            self._last_hourly_forecast = self._async_forecast_hourly()
+            self._last_hourly_forecast_day = hourly_forecast_day
             self._save_forecast_to_file(now)
 
     def _save_forecast_to_file(self, now: datetime) -> None:

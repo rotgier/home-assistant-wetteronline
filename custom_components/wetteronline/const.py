@@ -109,7 +109,10 @@ SYMBOLTEXT_CONDITION_MAP: Final[dict[str, str]] = {
     "Gewitter": ATTR_CONDITION_LIGHTNING_RAINY,
     ###############################################
     "ns____": ATTR_CONDITION_FOG,  # partly foggy
+    "nm____": ATTR_CONDITION_FOG,  # partly foggy
     "teils Nebel, teils Sonne": ATTR_CONDITION_FOG,  # partly foggy
+    "teilsNebel,teilsSonne": ATTR_CONDITION_FOG,  # partly foggy
+    "teilsNebel,teilsklar": ATTR_CONDITION_FOG,  # partly foggy
     "nb____": ATTR_CONDITION_FOG,
     "Nebel": ATTR_CONDITION_FOG,
 }
@@ -155,8 +158,11 @@ SYMBOLTEXT_CONDITION_CUSTOM_MAP.update(
         #########
         "leichterRegen": ATTR_CONDITION_POURING_LIGHT,
         ###############################################
-        "ns____": ATTR_CONDITION_FOG_PARTLY,  # trochę słońca trochę mgły
-        "teils Nebel, teils Sonne": ATTR_CONDITION_FOG_PARTLY,  # trochę słońca i mgły
+        "ns____": ATTR_CONDITION_FOG_PARTLY,  # partly foggy
+        "nm____": ATTR_CONDITION_FOG_PARTLY,  # partly foggy
+        "teils Nebel, teils Sonne": ATTR_CONDITION_FOG_PARTLY,  # partly foggy
+        "teilsNebel,teilsSonne": ATTR_CONDITION_FOG_PARTLY,  # partly foggy
+        "teilsNebel,teilsklar": ATTR_CONDITION_FOG_PARTLY,  # partly foggy
     }
 )
 

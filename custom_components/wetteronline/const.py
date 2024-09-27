@@ -106,6 +106,20 @@ SYMBOLTEXT_CONDITION_MAP: Final[dict[str, str]] = {
     "stark bewölkt": ATTR_CONDITION_CLOUDY,  # clouds
     "starkbewölkt": ATTR_CONDITION_CLOUDY,  # clouds
     ###############################################
+    "bwg1__": ATTR_CONDITION_LIGHTNING_RAINY,
+    "bwg2__": ATTR_CONDITION_LIGHTNING_RAINY,
+    "bwg3__": ATTR_CONDITION_LIGHTNING_RAINY,
+    "bdg1__": ATTR_CONDITION_LIGHTNING_RAINY, # without sun
+    "bdg2__": ATTR_CONDITION_LIGHTNING_RAINY, # without sun
+    "bdg3__": ATTR_CONDITION_LIGHTNING_RAINY, # without sun
+    #########
+    "mwg1__": ATTR_CONDITION_LIGHTNING_RAINY,
+    "mwg2__": ATTR_CONDITION_LIGHTNING_RAINY,
+    "mwg3__": ATTR_CONDITION_LIGHTNING_RAINY,
+    "mdg1__": ATTR_CONDITION_LIGHTNING_RAINY, # without moon
+    "mdg2__": ATTR_CONDITION_LIGHTNING_RAINY, # without moon
+    "mdg3__": ATTR_CONDITION_LIGHTNING_RAINY, # without moon
+    #########
     "Gewitter": ATTR_CONDITION_LIGHTNING_RAINY,
     ###############################################
     "ns____": ATTR_CONDITION_FOG,  # partly foggy

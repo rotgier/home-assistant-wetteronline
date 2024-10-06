@@ -180,6 +180,6 @@ SYMBOLTEXT_CONDITION_CUSTOM_MAP.update(
     }
 )
 
-UPDATE_INTERVAL_WETTERONLINE = timedelta(minutes=15)
+UPDATE_INTERVAL_WETTERONLINE = timedelta(minutes=5)
 
 CONF_URL_WETTERONLINE: Final = "url_wetteronline"

@@ -190,62 +190,7 @@ class WetterOnlineEntity(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        now = now_local()
         super()._handle_coordinator_update()
-        hourly_forecast_raw = self.coordinator.data.hourly_forecast
-        if not hourly_forecast_raw:
-            return
-
-        hourly_forecast_first_hour: datetime = hourly_forecast_raw[0]["datetime"]
-        hourly_forecast_day: date = hourly_forecast_first_hour.date()
-        if not self._last_hourly_forecast:
-            self._last_hourly_forecast = self._async_forecast_hourly()
-            self._last_hourly_forecast_day = hourly_forecast_day
-            self._save_forecast_to_file(now)
-            return
-
-        assert self._last_hourly_forecast_day
-        if hourly_forecast_day != self._last_hourly_forecast_day:
-            self._last_hourly_forecast = self._async_forecast_hourly()
-            self._last_hourly_forecast_day = hourly_forecast_day
-            self._save_forecast_to_file(now)
-            return
-
-        hourly_forecast = self._async_forecast_hourly()
-        last_hourly_forecast = self._last_hourly_forecast
-        len_difference = len(last_hourly_forecast) - len(hourly_forecast)
-
-        if len_difference == 0:
-            if hourly_forecast != last_hourly_forecast:
-                self._last_hourly_forecast = self._async_forecast_hourly()
-                self._last_hourly_forecast_day = hourly_forecast_day
-                self._save_forecast_to_file(now)
-        elif len_difference > 0:
-            if (
-                last_hourly_forecast[len_difference][ATTR_FORECAST_TIME]
-                == hourly_forecast[0][ATTR_FORECAST_TIME]
-            ):
-                _LOGGER.warning("First element datetime does not match!")
-            if (
-                last_hourly_forecast[len_difference + 1][ATTR_FORECAST_TIME]
-                == hourly_forecast[1][ATTR_FORECAST_TIME]
-            ):
-                _LOGGER.warning("Second element datetime does not match!")
-            if hourly_forecast != last_hourly_forecast[len_difference:]:
-                _LOGGER.warning("New smaller hourly_forecast differs. Saving it")
-                self._last_hourly_forecast = self._async_forecast_hourly()
-                self._last_hourly_forecast_day = hourly_forecast_day
-                self._save_forecast_to_file(now)
-            else:
-                _LOGGER.warning("New smaller hourly_forecast is the same")
-        else:
-            _LOGGER.warning("Negative len_difference: {len_difference}")
-            self._last_hourly_forecast = self._async_forecast_hourly()
-            self._last_hourly_forecast_day = hourly_forecast_day
-            self._save_forecast_to_file(now)
-
-    def _save_forecast_to_file(self, now: datetime) -> None:
-        _LOGGER.debug("_save_forecast_to_file")
 
 
 def _map_symbol_to_condition(symbol: str) -> str:

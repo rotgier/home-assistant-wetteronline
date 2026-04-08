@@ -1,23 +1,32 @@
-"""API for fetching WetterOnline data."""
+"""API for fetching WetterOnline data via wo-cloud API."""
 
-import ast
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-import html
+from datetime import datetime
 import logging
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
 from aiohttp import ClientSession
-import bs4
 
-MIDNIGHT: Final = datetime.min.time()
-HTTP_HEADERS: dict[str, str] = {
-    "Accept-Encoding": "gzip",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
-}
+API_BASE: Final = "https://api-web.wo-cloud.com"
+API_KEY: Final = "d293ZWI6QzhMNFRINmVUbkRoVWFqYg=="
+TIMEZONE: Final = ZoneInfo("Europe/Warsaw")
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class WetterOnlineLocationParams:
+    """Location parameters for wo-cloud API."""
+
+    location_id: str
+    latitude: float
+    longitude: float
+    grid_latitude: float
+    grid_longitude: float
+    astro_latitude: float
+    astro_longitude: float
+    altitude: int
 
 
 @dataclass
@@ -30,173 +39,80 @@ class WetterOnlineData:
 
 
 class WetterOnline:
-    """Main class to perform WetterOnline requests."""
+    """Main class to perform WetterOnline requests via wo-cloud API."""
 
-    def __init__(self, session: ClientSession, url: str) -> None:  # noqa: D107
+    def __init__(self, session: ClientSession, location: WetterOnlineLocationParams) -> None:  # noqa: D107
         self._session = session
-        url = url.lstrip("/")
-        self.complete_url = f"https://www.wetteronline.de/{url}"
+        self._location = location
+        self.complete_url = f"https://www.wetteronline.de/wetter/{location.location_id}"
+
+    async def _get_release_version(self) -> str:
+        url = f"{API_BASE}/blending/release/latest/v1?c={API_KEY}"
+        async with self._session.get(url) as resp:
+            data = await resp.json()
+            return data["release"]
+
+    async def _get_shortcast(self, release: str) -> dict:
+        loc = self._location
+        url = (
+            f"{API_BASE}/blending/shortcast/v1?c={API_KEY}"
+            f"&language=de&timezone=Europe/Warsaw"
+            f"&location_id={loc.location_id}"
+            f"&latitude={loc.latitude}&longitude={loc.longitude}"
+            f"&astro_latitude={loc.astro_latitude}&astro_longitude={loc.astro_longitude}"
+            f"&altitude={loc.altitude}"
+            f"&grid_latitude={loc.grid_latitude}&grid_longitude={loc.grid_longitude}"
+            f"&release_version={release}"
+        )
+        async with self._session.get(url) as resp:
+            return await resp.json()
+
+    async def _get_forecast(self, release: str) -> dict:
+        loc = self._location
+        url = (
+            f"{API_BASE}/blending/forecast/v1?c={API_KEY}"
+            f"&timezone=Europe/Warsaw"
+            f"&location_id={loc.location_id}"
+            f"&grid_latitude={loc.grid_latitude}&grid_longitude={loc.grid_longitude}"
+            f"&release_version={release}"
+        )
+        async with self._session.get(url) as resp:
+            return await resp.json()
 
     async def async_get_weather(self) -> WetterOnlineData:
-        """Fetch data from WetterOnline."""
-        async with self._session.get(
-            self.complete_url, headers=HTTP_HEADERS, allow_redirects=False
-        ) as resp:
-            raw_html = html.unescape(await resp.text())
-            weather_utils = WeatherUtils(raw_html)
-            return WetterOnlineData(
-                current_observations=weather_utils.current_observations(),
-                daily_forecast=weather_utils.daily_forecast(),
-                hourly_forecast=weather_utils.hourly_forecast(),
-            )
+        """Fetch data from WetterOnline wo-cloud API."""
+        release = await self._get_release_version()
+        shortcast = await self._get_shortcast(release)
+        forecast = await self._get_forecast(release)
 
-
-class WeatherUtils:
-    """Logic for extraction weather data from raw html."""
-
-    def __init__(self, raw_html=None) -> None:  # noqa: D107
-        self.timezone = None
-        self.soup = bs4.BeautifulSoup(raw_html, "lxml")
-
-    def current_observations(self) -> dict[str, Any]:
-        """Return the current observations 4 day forecast of the given `url`."""
-
-        temperature = (
-            self.soup.find("div", {"id": "nowcast-card-temperature"})
-            .find("div", {"class": "value"})
-            .text
-        )
-        temperature = int(temperature)
-        current_observations = {"temperature": temperature}
-
-        current_observations_raw = (
-            self.soup.find("div", {"id": "product_display"}).find("script").text
-        )
-
-        def clean(arg):
-            return arg.strip().strip(",").strip('"')
-
-        for line in current_observations_raw.split("\n"):
-            line = line.strip()
-            if "timeZone" in line:
-                timezone = line.split("=")[1].strip()
-                timezone = timezone.strip('";')
-                self.timezone = ZoneInfo(timezone)
-            if not line or line.startswith("WO") or line == "};":
-                continue
-
-            [key, value] = map(clean, line.split(":"))
-            current_observations[key] = value
-
-        return current_observations
-
-    def hourly_forecast(self) -> list[dict[str, Any]]:
-        """Return the hourly forecast of the given `url` for today and tomorrow."""
-
-        now_tz = datetime.now(tz=self.timezone)
-        today = datetime.combine(now_tz, MIDNIGHT, self.timezone)
-        tomorrow = today + timedelta(days=1)
-
-        scripts = self.soup.find("div", {"id": "hourly-container"}).find_all("script")
-        forecast: list[dict[str, Any]] = []
-
-        replace_keys = {
-            "windGusts": "windGustsBft",
-            "windDirection": "windDirectionLong",
-            "windDirectionShortSector": "windDirection",
+        current = shortcast.get("current", {})
+        current_observations = {
+            "temperature": current.get("air_temperature", {}).get("celsius"),
+            "symbol": current.get("symbol", ""),
         }
-        previous_hour: datetime = None
-        for script in scripts:
-            script = str(script).split("({")[1].split("})")[0].strip().replace(" ", "")
-            hourly_data_raw = []
-            for entry in script.split("\n"):
-                key = entry.split(":")[0]
-                value = entry.split(":")[1]
-                key = replace_keys.get(key, key)
-                hourly_data_raw.append(f'"{key}": {value}')
-            hourly_data = ast.literal_eval("{" + "".join(hourly_data_raw) + "}")
 
-            ## delete useless key
-            hourly_data.pop("docrootVersion", None)
+        hourly_forecast = []
+        for hour in shortcast.get("hours", []):
+            hourly_forecast.append({
+                "datetime": datetime.fromisoformat(hour["date"]),
+                "temperature": hour["air_temperature"]["celsius"],
+                "apparentTemperature": hour["apparent_temperature"]["celsius"],
+                "humidity": round(hour["humidity"] * 100),
+                "symbol": hour.get("symbol", ""),
+                "symbolText": hour.get("symbol", ""),
+            })
 
-            daySynonym = hourly_data["daySynonym"]
-            match daySynonym:
-                case "heute":
-                    forecast_day = today
-                case "morgen":
-                    forecast_day = tomorrow
-                case _:
-                    raise ValueError(
-                        f"daySynonym {daySynonym} is different than 'heute' and 'morgen'"
-                    )
+        daily_forecast = []
+        for day in forecast.get("days", []):
+            daily_forecast.append({
+                "datetime": datetime.fromisoformat(day["date"]),
+                "maxTemperature": day["air_temperature"]["max"]["celsius"],
+                "minTemperature": day["air_temperature"]["min"]["celsius"],
+                "precipitationProbability": round(day["precipitation"]["probability"] * 100),
+            })
 
-            hour = hourly_data.pop("hour")
-            current_hour = forecast_day.replace(hour=hour)
-            if previous_hour:
-                expected_next_hour = previous_hour + timedelta(hours=1)
-                if current_hour != expected_next_hour:
-                    _LOGGER.warning(
-                        "Whoa current_hour %s != expected_next_hour %s assuming expected",
-                        current_hour,
-                        expected_next_hour,
-                    )
-                    current_hour = expected_next_hour
-
-            hourly_data["datetime"] = current_hour
-            previous_hour = current_hour
-
-            forecast.append(hourly_data)
-
-        return forecast
-
-    def daily_forecast(self) -> list[dict[str, Any]]:
-        """Return the full 4 day forecast of the given `url`."""
-
-        ## get dates first
-        forecast: list[dict[str, Any]] = []
-
-        forecast_date = None
-        for i in self.soup.find("table", {"id": "daterow"}).find_all("th"):
-            if forecast_date is None:
-                date = i.find("span").text
-                if "," in list(date):
-                    date = date.split(", ")[1]
-                date += str(datetime.now().year)
-                forecast_date = datetime.strptime(date, "%d.%m.%Y")
-                forecast_date = datetime.combine(forecast_date, MIDNIGHT, self.timezone)
-            else:
-                forecast_date = forecast_date + timedelta(days=1)
-            forecast.append({"datetime": forecast_date})
-
-        weather_table = self.soup.find("table", {"id": "weather"})
-        # max temp
-        tags = list(
-            weather_table.find("tr", {"class": "Maximum Temperature"}).find_all("div")
+        return WetterOnlineData(
+            current_observations=current_observations,
+            daily_forecast=daily_forecast,
+            hourly_forecast=hourly_forecast,
         )
-        for i, tag in enumerate(tags):
-            tag_span = tag.find_all("span")[1]
-            forecast[i]["maxTemperature"] = int(str(tag_span.text).rstrip("°"))
-
-        # min temp
-        tags = list(
-            weather_table.find("tr", {"class": "Minimum Temperature"}).find_all("div")
-        )
-        for i, tag in enumerate(tags):
-            tag_span = tag.find_all("span")[1]
-            forecast[i]["minTemperature"] = int(str(tag_span.text).rstrip("°"))
-
-        # sun hours
-        tags = list(weather_table.find("tr", {"id": "sun_teaser"}).find_all("span"))
-        for i, tag in enumerate(tags):
-            forecast[i]["sunHours"] = int(str(tag.text).lstrip().rstrip(" Std.\n"))
-
-        # precipitation probability
-        tags = list(
-            weather_table.find("tr", {"id": "precipitation_teaser"}).find_all("span")
-        )
-        for i, tag in enumerate(tags):
-            forecast[i]["precipitationProbability"] = int(
-                str(tag.text).lstrip().rstrip(" %\n")
-            )
-
-        return forecast

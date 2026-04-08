@@ -11,7 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_URL_WETTERONLINE, UPDATE_INTERVAL_WETTERONLINE
 from .coordinator import WeatherOnlineDataUpdateCoordinator
-from .wetteronline_api import WetterOnline
+from .wetteronline_api import WetterOnline, WetterOnlineLocationParams
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,13 +25,24 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: WetterOnlineConfigEntry
 ) -> bool:
     """Set up WetterOnline as config entry."""
-    url: str = entry.data[CONF_URL_WETTERONLINE]
     name: str = entry.data[CONF_NAME]
 
-    _LOGGER.debug("Using url: %s", url)
+    # TODO: extract location params from config entry or HTML page
+    location = WetterOnlineLocationParams(
+        location_id="12566",
+        latitude=50.1225,
+        longitude=19.71,
+        grid_latitude=50.10,
+        grid_longitude=19.76,
+        astro_latitude=50.10,
+        astro_longitude=19.68,
+        altitude=250,
+    )
+
+    _LOGGER.debug("Using location_id: %s", location.location_id)
 
     websession = async_get_clientsession(hass)
-    wetteronline = WetterOnline(websession, url)
+    wetteronline = WetterOnline(websession, location)
 
     coordinator = WeatherOnlineDataUpdateCoordinator(
         hass, wetteronline, name, UPDATE_INTERVAL_WETTERONLINE

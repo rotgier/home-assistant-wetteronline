@@ -15,7 +15,7 @@ from .wetteronline_api import WetterOnline, WetterOnlineLocationParams
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.WEATHER]
+PLATFORMS = [Platform.SENSOR, Platform.WEATHER]
 
 
 type WetterOnlineConfigEntry = ConfigEntry[WeatherOnlineDataUpdateCoordinator]

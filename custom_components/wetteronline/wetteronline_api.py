@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo
 
 from aiohttp import ClientSession
 
+from .const import SYMBOLTEXT_CONDITION_CUSTOM_MAP
+
 API_BASE: Final = "https://api-web.wo-cloud.com"
 API_KEY: Final = "d293ZWI6QzhMNFRINmVUbkRoVWFqYg=="
 TIMEZONE: Final = ZoneInfo("Europe/Warsaw")
@@ -86,9 +88,13 @@ class WetterOnline:
         forecast = await self._get_forecast(release)
 
         current = shortcast.get("current", {})
+        current_symbol = current.get("symbol", "")
         current_observations = {
             "temperature": current.get("air_temperature", {}).get("celsius"),
-            "symbol": current.get("symbol", ""),
+            "symbol": current_symbol,
+            "condition_custom": SYMBOLTEXT_CONDITION_CUSTOM_MAP.get(
+                current_symbol, current_symbol
+            ),
         }
 
         hourly_forecast = []

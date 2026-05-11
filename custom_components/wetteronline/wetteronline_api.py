@@ -17,6 +17,83 @@ TIMEZONE: Final = ZoneInfo("Europe/Warsaw")
 _LOGGER = logging.getLogger(__name__)
 
 
+def _parse_duration_minutes(raw: Any) -> tuple[int | None, int | None]:
+    """Parse precipitation duration minutes — accepts 'X-Y' range or single 'X'.
+
+    wo-cloud reports duration.minutes as a string. For low-prob hours it's
+    "0-10"; for higher prob it can be a single value like "30" or "60".
+    Returns (min, max) tuple; (None, None) when raw is missing/malformed.
+    """
+    if raw is None:
+        return None, None
+    s = str(raw).strip()
+    if not s:
+        return None, None
+    if "-" in s:
+        parts = s.split("-", 1)
+        try:
+            return int(parts[0]), int(parts[1])
+        except (ValueError, IndexError):
+            return None, None
+    try:
+        v = int(s)
+        return v, v
+    except ValueError:
+        return None, None
+
+
+def _parse_hourly_pv_extras(hour: dict[str, Any]) -> dict[str, Any]:
+    """Extract PV-relevant fields from a wo-cloud hour entry.
+
+    Returns flat dict ready for spread into hourly_forecast item. Keys:
+    - precipitation_probability (int %, 0..100)
+    - precipitation_amount_mm_min, _max (float | None — only when details present,
+      typically when probability >= ~50%)
+    - precipitation_duration_min_min, _max (int | None — duration in minutes
+      within the hour; "X-Y" parsed as range, single "X" → min==max==X)
+    - precipitation_type (str | None — "rain", "snow", etc.)
+    - convection_probability (int %, 0..100)
+    - visibility_meter (int | None)
+    - smog_level (str | None — "none", "low", etc.)
+    - dew_point_celsius (float | None)
+    - air_pressure_hpa (int | None — wo-cloud returns string, cast to int)
+    - wind_speed_kmh (int | None)
+    - wind_direction_deg (int | None)
+    """
+    p = hour.get("precipitation", {}) or {}
+    det = p.get("details", {}) or {}
+    rain_mm = det.get("rainfall_amount", {}).get("millimeter", {}) or {}
+    dur_min, dur_max = _parse_duration_minutes(det.get("duration", {}).get("minutes"))
+    visibility = hour.get("visibility", {}) or {}
+    wind = hour.get("wind", {}) or {}
+    wind_kmh_value = (
+        wind.get("speed", {}).get("kilometer_per_hour", {}).get("value")
+    )
+    try:
+        wind_kmh = int(wind_kmh_value) if wind_kmh_value is not None else None
+    except (ValueError, TypeError):
+        wind_kmh = None
+    try:
+        pressure_hpa = int(hour.get("air_pressure", {}).get("hpa"))
+    except (ValueError, TypeError):
+        pressure_hpa = None
+    return {
+        "precipitation_probability": round(p.get("probability", 0) * 100),
+        "precipitation_amount_mm_min": rain_mm.get("interval_begin"),
+        "precipitation_amount_mm_max": rain_mm.get("interval_end"),
+        "precipitation_duration_min_min": dur_min,
+        "precipitation_duration_min_max": dur_max,
+        "precipitation_type": p.get("type"),
+        "convection_probability": round(hour.get("convection_probability", 0) * 100),
+        "visibility_meter": visibility.get("meter"),
+        "smog_level": hour.get("smog_level"),
+        "dew_point_celsius": hour.get("dew_point", {}).get("celsius"),
+        "air_pressure_hpa": pressure_hpa,
+        "wind_speed_kmh": wind_kmh,
+        "wind_direction_deg": wind.get("direction"),
+    }
+
+
 @dataclass
 class WetterOnlineLocationParams:
     """Location parameters for wo-cloud API."""
@@ -89,12 +166,30 @@ class WetterOnline:
 
         current = shortcast.get("current", {})
         current_symbol = current.get("symbol", "")
+        # Reuse hourly extras parser — `current` shares most fields with `hours[N]`.
+        # `current` adds: solar_elevation, air_pressure_tendency_category,
+        # weather_condition_image (no convection_probability / visibility).
+        current_extras = _parse_hourly_pv_extras(current)
+        # Drop hour-only fields that current doesn't carry (avoid misleading 0s).
+        current_extras.pop("convection_probability", None)
+        current_extras.pop("visibility_meter", None)
         current_observations = {
             "temperature": current.get("air_temperature", {}).get("celsius"),
+            "apparentTemperature": current.get("apparent_temperature", {}).get("celsius"),
+            "humidity": round(current.get("humidity", 0) * 100)
+            if current.get("humidity") is not None
+            else None,
             "symbol": current_symbol,
             "condition_custom": SYMBOLTEXT_CONDITION_CUSTOM_MAP.get(
                 current_symbol, current_symbol
             ),
+            # Current-only extras (not present in hour entries).
+            "solar_elevation": current.get("solar_elevation"),
+            "air_pressure_tendency_category": current.get(
+                "air_pressure_tendency_category"
+            ),
+            "weather_condition_image": current.get("weather_condition_image"),
+            **current_extras,
         }
 
         hourly_forecast = []
@@ -106,6 +201,7 @@ class WetterOnline:
                 "humidity": round(hour["humidity"] * 100),
                 "symbol": hour.get("symbol", ""),
                 "symbolText": hour.get("symbol", ""),
+                **_parse_hourly_pv_extras(hour),
             })
 
         daily_forecast = []

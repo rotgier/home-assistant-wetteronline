@@ -140,19 +140,33 @@ class WetterOnlineEntity(
         """Return the hourly forecast in native units.
 
         Prepends a synthesized entry for the current clock hour. wo-cloud's
-        `hours[]` starts at the next round hour, so without this prepend
-        the forecast list skips the hour we are actually in — the most
-        decision-relevant slot for "should I run X now". The synthesized
+        `hours[]` typically starts at the next round hour, so without this
+        prepend the forecast list skips the hour we are actually in — the
+        most decision-relevant slot for "should I run X now". The synthesized
         entry blends `current_observations` (live point-in-time),
         `nexthour_cache.current` (hour-forecast cached before rollover)
         and the 15-min nowcast items that fall in the current hour.
+
+        Edge case: in a ~5 min window right after a clock hour rolls over
+        and before the next coordinator fetch, wo-cloud's `hours[0]` may
+        still report the now-current round hour (because the upstream fetch
+        happened before rollover, and "next round hour" from then is the
+        current hour now). In that window the synthesized entry and
+        `hours[0]` would both target the same hour — we replace `hours[0]`
+        with the synthesized entry instead of duplicating, since synthesized
+        carries strictly richer data (live obs + cache + nowcast).
         """
         items = [
             self._hourly_forecast_item(item)
             for item in self.coordinator.data.hourly_forecast
         ]
         synthesized = self._synthesize_current_hour_forecast()
-        return [synthesized, *items] if synthesized else items
+        if not synthesized:
+            return items
+        if items and _same_hour(items[0][ATTR_FORECAST_TIME],
+                                synthesized[ATTR_FORECAST_TIME]):
+            return [synthesized, *items[1:]]
+        return [synthesized, *items]
 
     def _synthesize_current_hour_forecast(self) -> Forecast | None:
         """Build a `Forecast` entry for the current clock hour from cached + live data.
@@ -316,3 +330,13 @@ class WetterOnlineEntity(
 
 def _map_symbol_to_condition(symbol: str) -> str:
     return SYMBOLTEXT_CONDITION_MAP.get(symbol, symbol)
+
+
+def _same_hour(iso_a: str, iso_b: str) -> bool:
+    """True when two ISO timestamps share (date, hour)."""
+    try:
+        a = datetime.fromisoformat(iso_a)
+        b = datetime.fromisoformat(iso_b)
+    except (TypeError, ValueError):
+        return False
+    return a.date() == b.date() and a.hour == b.hour

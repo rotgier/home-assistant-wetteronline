@@ -6,6 +6,8 @@ from datetime import UTC, date, datetime
 import logging
 from typing import Any, cast
 
+from homeassistant.util import dt as dt_util
+
 from homeassistant.components.weather import (
     ATTR_FORECAST_CLOUD_COVERAGE,
     ATTR_FORECAST_CONDITION,
@@ -135,11 +137,104 @@ class WetterOnlineEntity(
 
     @callback
     def _async_forecast_hourly(self) -> list[Forecast] | None:
-        """Return the hourly forecast in native units."""
-        return [
+        """Return the hourly forecast in native units.
+
+        Prepends a synthesized entry for the current clock hour. wo-cloud's
+        `hours[]` starts at the next round hour, so without this prepend
+        the forecast list skips the hour we are actually in — the most
+        decision-relevant slot for "should I run X now". The synthesized
+        entry blends `current_observations` (live point-in-time),
+        `nexthour_cache.current` (hour-forecast cached before rollover)
+        and the 15-min nowcast items that fall in the current hour.
+        """
+        items = [
             self._hourly_forecast_item(item)
             for item in self.coordinator.data.hourly_forecast
         ]
+        synthesized = self._synthesize_current_hour_forecast()
+        return [synthesized, *items] if synthesized else items
+
+    def _synthesize_current_hour_forecast(self) -> Forecast | None:
+        """Build a `Forecast` entry for the current clock hour from cached + live data.
+
+        Returns None only when current observations are entirely missing
+        (right after install, before the first successful fetch). When
+        `nexthour_cache.current` is absent or stale (warm-up window, long
+        outage), the cache-sourced fields fall back to None — the synthesis
+        still returns a useful entry from live observations + nowcast.
+        """
+        data = self.coordinator.data
+        obs = data.current_observations if data else None
+        if not obs:
+            return None
+        cache_current = (self.coordinator.nexthour_cache or {}).get("current") or {}
+
+        now = dt_util.now()
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        symbol = obs.get("symbol", "")
+        symbol_text = symbol
+
+        forecast: Forecast = {
+            ATTR_FORECAST_TIME: current_hour.isoformat(),
+            ATTR_FORECAST_NATIVE_TEMP: obs.get("temperature"),
+            ATTR_FORECAST_NATIVE_APPARENT_TEMP: obs.get("apparentTemperature"),
+            ATTR_FORECAST_HUMIDITY: obs.get("humidity"),
+            ATTR_FORECAST_PRECIPITATION_PROBABILITY: obs.get(
+                "precipitation_probability"
+            ),
+            ATTR_FORECAST_SYMBOL: symbol,
+            ATTR_FORECAST_SYMBOLTEXT: symbol_text,
+            # Cache-sourced — hour-forecast for the current hour, captured
+            # before it became current (typically the :59:30 forced fetch).
+            "precipitation_amount_mm_min": cache_current.get(
+                "precipitation_amount_mm_min"
+            ),
+            "precipitation_amount_mm_max": cache_current.get(
+                "precipitation_amount_mm_max"
+            ),
+            "precipitation_duration_min_min": cache_current.get(
+                "precipitation_duration_min_min"
+            ),
+            "precipitation_duration_min_max": cache_current.get(
+                "precipitation_duration_min_max"
+            ),
+            "convection_probability": cache_current.get("convection_probability"),
+            "visibility_meter": cache_current.get("visibility_meter"),
+            # Live point-in-time — semantically "now", not hour aggregate.
+            "precipitation_type": obs.get("precipitation_type"),
+            "smog_level": obs.get("smog_level"),
+            "dew_point_celsius": obs.get("dew_point_celsius"),
+            "air_pressure_hpa": obs.get("air_pressure_hpa"),
+            "wind_speed_kmh": obs.get("wind_speed_kmh"),
+            "wind_direction_deg": obs.get("wind_direction_deg"),
+            # 15-min sub-hour items for the current hour (some slots may be
+            # past from a real-time perspective; consumers can filter).
+            "nowcast_15min": self._nowcast_items_for_current_hour(now),
+            # When the coordinator last fetched any wo-cloud data. Purely
+            # informational — lets consumers display data freshness.
+            "fetched_at": (
+                self.coordinator.last_fetched_at.isoformat()
+                if self.coordinator.last_fetched_at
+                else None
+            ),
+        }
+        self._set_condition(forecast, symbol, symbol_text)
+        self._set_custom_condition(forecast, symbol, symbol_text)
+        return forecast
+
+    def _nowcast_items_for_current_hour(self, now: datetime) -> list[dict[str, Any]]:
+        data = self.coordinator.data
+        if not data or not data.nowcast_items:
+            return []
+        out: list[dict[str, Any]] = []
+        for item in data.nowcast_items:
+            try:
+                dt = datetime.fromisoformat(item["date"])
+            except (KeyError, ValueError):
+                continue
+            if dt.date() == now.date() and dt.hour == now.hour:
+                out.append(item)
+        return out
 
     def _hourly_forecast_item(self, item: dict[str, Any]) -> Forecast:
         symbol = item["symbol"]

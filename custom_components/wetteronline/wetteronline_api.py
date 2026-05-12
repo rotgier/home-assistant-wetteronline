@@ -1,6 +1,6 @@
 """API for fetching WetterOnline data via wo-cloud API."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import logging
 from typing import Any, Final
@@ -110,8 +110,9 @@ def _parse_nowcast_items(nowcast_trend: dict[str, Any] | None) -> list[dict[str,
     wo-cloud's nowcast extends ~105 min ahead at 15-min granularity. Each
     item ships temperature, symbol and precipitation prob/type only —
     rainfall amount/duration and wind never appear here (live only in
-    `hours[]`). We keep symbol + precipitation fields, which is what makes
-    the data useful as a 15-min refinement of the surrounding hour.
+    `hours[]`). We keep symbol + precipitation fields + a `condition_custom`
+    translation of the symbol so dashboards can show the granular palette
+    without re-mapping client-side.
     """
     if not nowcast_trend:
         return []
@@ -121,9 +122,11 @@ def _parse_nowcast_items(nowcast_trend: dict[str, Any] | None) -> list[dict[str,
         if not date:
             continue
         precipitation = item.get("precipitation", {}) or {}
+        symbol = item.get("symbol", "")
         out.append({
             "date": date,
-            "symbol": item.get("symbol", ""),
+            "symbol": symbol,
+            "condition_custom": SYMBOLTEXT_CONDITION_CUSTOM_MAP.get(symbol, symbol),
             "precipitation_probability": round(
                 precipitation.get("probability", 0) * 100
             ),
@@ -198,6 +201,7 @@ class WetterOnlineData:
     daily_forecast: list[dict[str, Any]]
     hourly_forecast: list[dict[str, Any]]
     next_hour_raw: dict[str, Any] | None = None
+    nowcast_items: list[dict[str, Any]] = field(default_factory=list)
 
 
 class WetterOnline:
@@ -310,4 +314,5 @@ class WetterOnline:
             daily_forecast=daily_forecast,
             hourly_forecast=hourly_forecast,
             next_hour_raw=next_hour_raw,
+            nowcast_items=nowcast_items,
         )

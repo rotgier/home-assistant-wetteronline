@@ -1,7 +1,7 @@
 """The WetterOnline coordinator."""
 
 from asyncio import timeout
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +42,12 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
         # `current` holds the data for the current clock hour, `next` for
         # the upcoming one. On rollover, `next` is promoted to `current`.
         self.nexthour_cache: dict[str, Any] = dict(NEXTHOUR_EMPTY_CACHE)
+        # Local timestamp of the most recent successful fetch. Surfaced on
+        # the synthesized current-hour forecast entry so consumers can tell
+        # how fresh the coordinator-wide data is (separate from per-bucket
+        # `cache.<current|next>.fetched_at` which only covers the cached
+        # hour-forecast slice).
+        self.last_fetched_at: datetime | None = None
 
         if TYPE_CHECKING:
             assert name is not None
@@ -76,6 +82,7 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
             _LOGGER.exception("Update failed")
             raise UpdateFailed(error) from error
 
+        self.last_fetched_at = dt_util.now()
         self._update_nexthour_cache(result.next_hour_raw)
         await self.nexthour_store.async_save(self.nexthour_cache)
         return result

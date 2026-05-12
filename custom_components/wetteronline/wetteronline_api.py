@@ -104,7 +104,10 @@ _NEXTHOUR_FIELDS: tuple[str, ...] = (
 )
 
 
-def _parse_nowcast_items(nowcast_trend: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _parse_nowcast_items(
+    nowcast_trend: dict[str, Any] | None,
+    fetched_at: datetime,
+) -> list[dict[str, Any]]:
     """Parse `nowcast_trend.items[]` into a minimal list of 15-min sub-hour entries.
 
     wo-cloud's nowcast extends ~105 min ahead at 15-min granularity. Each
@@ -113,6 +116,16 @@ def _parse_nowcast_items(nowcast_trend: dict[str, Any] | None) -> list[dict[str,
     `hours[]`). We keep symbol + precipitation fields + a `condition_custom`
     translation of the symbol so dashboards can show the granular palette
     without re-mapping client-side.
+
+    Source-level filter: drop items whose `date` is at-or-before `fetched_at`.
+    wo-cloud starts nowcast at the current 15-min bucket boundary, so when
+    we fetch at e.g. 11:04 the first item is 11:00 — 4 min in the past from
+    the fetch perspective. History is authoritative for "what already
+    happened"; nowcast only contributes slots strictly after the fetch. The
+    strict `<=` also avoids X-axis collisions when a state change later
+    occurs exactly at a 15-min boundary. Filter lives here so every
+    consumer (chart JS, smart_rce table) gets pre-cleaned data — single
+    source of truth.
     """
     if not nowcast_trend:
         return []
@@ -120,6 +133,12 @@ def _parse_nowcast_items(nowcast_trend: dict[str, Any] | None) -> list[dict[str,
     for item in nowcast_trend.get("items", []):
         date = item.get("date")
         if not date:
+            continue
+        try:
+            item_dt = datetime.fromisoformat(date)
+        except ValueError:
+            continue
+        if item_dt <= fetched_at:
             continue
         precipitation = item.get("precipitation", {}) or {}
         symbol = item.get("symbol", "")
@@ -247,6 +266,7 @@ class WetterOnline:
 
     async def async_get_weather(self) -> WetterOnlineData:
         """Fetch data from WetterOnline wo-cloud API."""
+        fetched_at = datetime.now(TIMEZONE)
         release = await self._get_release_version()
         shortcast = await self._get_shortcast(release)
         forecast = await self._get_forecast(release)
@@ -282,7 +302,9 @@ class WetterOnline:
         hours = shortcast.get("hours", [])
         next_hour_raw = parse_nexthour_extras(hours[0]) if hours else None
 
-        nowcast_items = _parse_nowcast_items(shortcast.get("nowcast_trend"))
+        nowcast_items = _parse_nowcast_items(
+            shortcast.get("nowcast_trend"), fetched_at
+        )
         nowcast_by_hour = _group_nowcast_by_hour(nowcast_items)
 
         hourly_forecast = []

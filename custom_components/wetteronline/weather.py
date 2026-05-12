@@ -103,59 +103,6 @@ class WetterOnlineEntity(
         """Return the temperature."""
         return cast(float, self.coordinator.data.current_observations["temperature"])
 
-    @property
-    def native_apparent_temperature(self) -> float | None:
-        """Return apparent (feels-like) temperature."""
-        return self.coordinator.data.current_observations.get("apparentTemperature")
-
-    @property
-    def humidity(self) -> float | None:
-        """Return current relative humidity (%)."""
-        return self.coordinator.data.current_observations.get("humidity")
-
-    @property
-    def native_pressure(self) -> float | None:
-        """Return current air pressure (hPa)."""
-        return self.coordinator.data.current_observations.get("air_pressure_hpa")
-
-    @property
-    def native_dew_point(self) -> float | None:
-        """Return current dew point (°C)."""
-        return self.coordinator.data.current_observations.get("dew_point_celsius")
-
-    @property
-    def native_wind_speed(self) -> float | None:
-        """Return current wind speed (km/h)."""
-        return self.coordinator.data.current_observations.get("wind_speed_kmh")
-
-    @property
-    def wind_bearing(self) -> float | None:
-        """Return current wind direction (deg)."""
-        return self.coordinator.data.current_observations.get("wind_direction_deg")
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose PV-relevant fields not covered by standard HA weather props.
-
-        Includes precipitation probability/amount/duration/type, smog level,
-        solar elevation (°), air pressure tendency category (-1/0/+1).
-        Used by smart_rce/dashboard for PV adjustment and short-horizon
-        decision making.
-        """
-        obs = self.coordinator.data.current_observations
-        return {
-            "precipitation_probability": obs.get("precipitation_probability"),
-            "precipitation_amount_mm_min": obs.get("precipitation_amount_mm_min"),
-            "precipitation_amount_mm_max": obs.get("precipitation_amount_mm_max"),
-            "precipitation_duration_min_min": obs.get("precipitation_duration_min_min"),
-            "precipitation_duration_min_max": obs.get("precipitation_duration_min_max"),
-            "precipitation_type": obs.get("precipitation_type"),
-            "smog_level": obs.get("smog_level"),
-            "solar_elevation": obs.get("solar_elevation"),
-            "air_pressure_tendency_category": obs.get("air_pressure_tendency_category"),
-            "weather_condition_image": obs.get("weather_condition_image"),
-        }
-
     @callback
     def _async_forecast_daily(self) -> list[Forecast] | None:
         """Return the daily forecast in native units."""

@@ -94,6 +94,28 @@ def _parse_hourly_pv_extras(hour: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def parse_nexthour_extras(hour: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract nexthour cache fields from a wo-cloud `hours[]` entry.
+
+    `current` lacks `visibility` and `convection_probability` — they only
+    exist per-hour. `hours[0]` is the upcoming round hour; storing it and
+    promoting it to `current` at hour rollover lets us serve those fields
+    as current-hour sensors.
+
+    Returns `{hour_iso, visibility_meter, convection_probability}` or None
+    when the entry is missing fields needed for cache promotion.
+    """
+    hour_iso = hour.get("date")
+    if not hour_iso:
+        return None
+    visibility = hour.get("visibility", {}) or {}
+    return {
+        "hour_iso": hour_iso,
+        "visibility_meter": visibility.get("meter"),
+        "convection_probability": round(hour.get("convection_probability", 0) * 100),
+    }
+
+
 @dataclass
 class WetterOnlineLocationParams:
     """Location parameters for wo-cloud API."""
@@ -115,6 +137,7 @@ class WetterOnlineData:
     current_observations: dict[str, Any]
     daily_forecast: list[dict[str, Any]]
     hourly_forecast: list[dict[str, Any]]
+    next_hour_raw: dict[str, Any] | None = None
 
 
 class WetterOnline:
@@ -192,8 +215,11 @@ class WetterOnline:
             **current_extras,
         }
 
+        hours = shortcast.get("hours", [])
+        next_hour_raw = parse_nexthour_extras(hours[0]) if hours else None
+
         hourly_forecast = []
-        for hour in shortcast.get("hours", []):
+        for hour in hours:
             hourly_forecast.append({
                 "datetime": datetime.fromisoformat(hour["date"]),
                 "temperature": hour["air_temperature"]["celsius"],
@@ -217,4 +243,5 @@ class WetterOnline:
             current_observations=current_observations,
             daily_forecast=daily_forecast,
             hourly_forecast=hourly_forecast,
+            next_hour_raw=next_hour_raw,
         )

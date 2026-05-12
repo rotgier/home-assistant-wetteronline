@@ -7,12 +7,20 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN
 from .wetteronline_api import WetterOnline, WetterOnlineData
 
 _LOGGER = logging.getLogger(__name__)
+
+NEXTHOUR_CACHE_VERSION = 1
+NEXTHOUR_EMPTY_CACHE: dict[str, Any] = {
+    "version": NEXTHOUR_CACHE_VERSION,
+    "current": None,
+    "next": None,
+}
 
 
 class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]):
@@ -24,9 +32,15 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
         wetteronline: WetterOnline,
         name: str,
         update_interval: timedelta,
+        nexthour_store: Store,
     ) -> None:
         """Initialize."""
         self.wetteronline = wetteronline
+        self.nexthour_store = nexthour_store
+        # Sliding-window cache for the visibility/convection sensors.
+        # `current` holds the data for the current clock hour, `next` for
+        # the upcoming one. On rollover, `next` is promoted to `current`.
+        self.nexthour_cache: dict[str, Any] = dict(NEXTHOUR_EMPTY_CACHE)
 
         if TYPE_CHECKING:
             assert name is not None
@@ -46,7 +60,13 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
             update_interval=update_interval,
         )
 
-    async def _async_update_data(self) -> dict[str, Any]:
+    async def async_restore_nexthour_cache(self) -> None:
+        """Load the persisted nexthour cache from disk, if present."""
+        stored = await self.nexthour_store.async_load()
+        if isinstance(stored, dict) and stored.get("version") == NEXTHOUR_CACHE_VERSION:
+            self.nexthour_cache = stored
+
+    async def _async_update_data(self) -> WetterOnlineData:
         """Update data via library."""
         try:
             async with timeout(10):
@@ -55,4 +75,22 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
             _LOGGER.exception("Update failed")
             raise UpdateFailed(error) from error
 
+        self._update_nexthour_cache(result.next_hour_raw)
+        await self.nexthour_store.async_save(self.nexthour_cache)
         return result
+
+    def _update_nexthour_cache(self, new_next: dict[str, Any] | None) -> None:
+        """Promote `next → current` on hour rollover, refresh `next` otherwise."""
+        if not new_next or not new_next.get("hour_iso"):
+            return
+        current_next = self.nexthour_cache.get("next")
+        if current_next and current_next.get("hour_iso") == new_next["hour_iso"]:
+            # Same upcoming hour — refresh values, forecast precision improves
+            # as the hour approaches.
+            self.nexthour_cache["next"] = new_next
+        else:
+            # Hour boundary crossed since last fetch — what was "next" is now
+            # the current hour's data; this fetch's hours[0] becomes the new
+            # "next".
+            self.nexthour_cache["current"] = current_next
+            self.nexthour_cache["next"] = new_next

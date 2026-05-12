@@ -6,16 +6,21 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.storage import Store
 
-from .const import CONF_URL_WETTERONLINE, UPDATE_INTERVAL_WETTERONLINE
+from .const import CONF_URL_WETTERONLINE, DOMAIN, UPDATE_INTERVAL_WETTERONLINE
 from .coordinator import WeatherOnlineDataUpdateCoordinator
 from .wetteronline_api import WetterOnline, WetterOnlineLocationParams
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR, Platform.WEATHER]
+
+NEXTHOUR_STORE_KEY = f"{DOMAIN}_nexthour_cache"
+NEXTHOUR_STORE_VERSION = 1
 
 
 type WetterOnlineConfigEntry = ConfigEntry[WeatherOnlineDataUpdateCoordinator]
@@ -44,11 +49,25 @@ async def async_setup_entry(
     websession = async_get_clientsession(hass)
     wetteronline = WetterOnline(websession, location)
 
+    nexthour_store: Store = Store(hass, NEXTHOUR_STORE_VERSION, NEXTHOUR_STORE_KEY)
     coordinator = WeatherOnlineDataUpdateCoordinator(
-        hass, wetteronline, name, UPDATE_INTERVAL_WETTERONLINE
+        hass, wetteronline, name, UPDATE_INTERVAL_WETTERONLINE, nexthour_store
     )
 
+    await coordinator.async_restore_nexthour_cache()
     await coordinator.async_config_entry_first_refresh()
+
+    # Force an extra coordinator refresh at :59:30 of every hour. The regular
+    # 5-min poll already feeds `cache.next`; the :59:30 fetch ensures the
+    # freshest possible data right before the hour rolls over and `cache.next`
+    # is promoted to `cache.current`.
+    @callback
+    def _hourly_refresh(_now) -> None:
+        hass.async_create_task(coordinator.async_request_refresh())
+
+    entry.async_on_unload(
+        async_track_time_change(hass, _hourly_refresh, minute=59, second=30)
+    )
 
     entry.runtime_data = coordinator
 

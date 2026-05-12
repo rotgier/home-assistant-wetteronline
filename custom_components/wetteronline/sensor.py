@@ -121,42 +121,6 @@ NUMERIC_SENSORS: tuple[WetterOnlineSensorDescription, ...] = (
         value_fn=lambda obs: obs.get("precipitation_probability"),
     ),
     WetterOnlineSensorDescription(
-        key="precipitation_amount_mm_min",
-        name="Precipitation Amount Min",
-        native_unit_of_measurement=UnitOfPrecipitationDepth.MILLIMETERS,
-        device_class=SensorDeviceClass.PRECIPITATION,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda obs: obs.get("precipitation_amount_mm_min"),
-    ),
-    WetterOnlineSensorDescription(
-        key="precipitation_amount_mm_max",
-        name="Precipitation Amount Max",
-        native_unit_of_measurement=UnitOfPrecipitationDepth.MILLIMETERS,
-        device_class=SensorDeviceClass.PRECIPITATION,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda obs: obs.get("precipitation_amount_mm_max"),
-    ),
-    WetterOnlineSensorDescription(
-        key="precipitation_duration_min_min",
-        name="Precipitation Duration Min",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-        device_class=SensorDeviceClass.DURATION,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda obs: obs.get("precipitation_duration_min_min"),
-    ),
-    WetterOnlineSensorDescription(
-        key="precipitation_duration_min_max",
-        name="Precipitation Duration Max",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-        device_class=SensorDeviceClass.DURATION,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda obs: obs.get("precipitation_duration_min_max"),
-    ),
-    WetterOnlineSensorDescription(
         key="solar_elevation",
         name="Solar Elevation",
         native_unit_of_measurement=DEGREE,
@@ -199,9 +163,10 @@ STRING_SENSORS: tuple[WetterOnlineSensorDescription, ...] = (
 
 # Nexthour sensors — back-fed from the sliding-window cache that
 # `coordinator.nexthour_cache["current"]` keeps. wo-cloud's `current` payload
-# lacks these fields; they only appear in `hours[]`, so we have to remember
-# the upcoming-hour data fetched in the previous hour and promote it on
-# rollover (see coordinator._update_nexthour_cache).
+# omits these fields: `visibility` and `convection_probability` never appear
+# there; `precipitation.details.*` (amount, duration) only appear in `hours[]`
+# (and only when probability is high enough). The sliding cache lets us
+# expose all six as current-hour sensors with LTS.
 NEXTHOUR_SENSORS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="visibility",
@@ -218,11 +183,50 @@ NEXTHOUR_SENSORS: tuple[SensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    SensorEntityDescription(
+        key="precipitation_amount_mm_min",
+        name="Precipitation Amount Min",
+        native_unit_of_measurement=UnitOfPrecipitationDepth.MILLIMETERS,
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="precipitation_amount_mm_max",
+        name="Precipitation Amount Max",
+        native_unit_of_measurement=UnitOfPrecipitationDepth.MILLIMETERS,
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="precipitation_duration_min_min",
+        name="Precipitation Duration Min",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="precipitation_duration_min_max",
+        name="Precipitation Duration Max",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
+# Sensor key → field name in `cache.current`. For most sensors the two match
+# (identity), but visibility uses the explicit `_meter` suffix in the cache
+# to mirror the parser output.
 NEXTHOUR_FIELD_BY_KEY = {
     "visibility": "visibility_meter",
     "convection_probability": "convection_probability",
+    "precipitation_amount_mm_min": "precipitation_amount_mm_min",
+    "precipitation_amount_mm_max": "precipitation_amount_mm_max",
+    "precipitation_duration_min_min": "precipitation_duration_min_min",
+    "precipitation_duration_min_max": "precipitation_duration_min_max",
 }
 
 

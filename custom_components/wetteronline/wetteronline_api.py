@@ -94,26 +94,39 @@ def _parse_hourly_pv_extras(hour: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_NEXTHOUR_FIELDS: tuple[str, ...] = (
+    "visibility_meter",
+    "convection_probability",
+    "precipitation_amount_mm_min",
+    "precipitation_amount_mm_max",
+    "precipitation_duration_min_min",
+    "precipitation_duration_min_max",
+)
+
+
 def parse_nexthour_extras(hour: dict[str, Any]) -> dict[str, Any] | None:
     """Extract nexthour cache fields from a wo-cloud `hours[]` entry.
 
-    `current` lacks `visibility` and `convection_probability` — they only
-    exist per-hour. `hours[0]` is the upcoming round hour; storing it and
-    promoting it to `current` at hour rollover lets us serve those fields
-    as current-hour sensors.
+    `current` carries `precipitation.{probability,type}` only — never
+    `precipitation.details.*` (rainfall amount, duration), and lacks
+    `visibility` + `convection_probability` entirely. These fields live
+    only in `hours[N]`. `hours[0]` is the upcoming round hour; storing it
+    and promoting it to `current` at hour rollover lets us serve all six
+    fields as current-hour sensors.
 
-    Returns `{hour_iso, visibility_meter, convection_probability}` or None
-    when the entry is missing fields needed for cache promotion.
+    Returns `{hour_iso, ...six fields}` or None when the entry is missing
+    `date` (needed for cache promotion logic).
+
+    Note: `details.*` is sometimes omitted by wo-cloud when probability is
+    low (observed: present at prob=0.95, absent at prob=0.2). The defensive
+    `.get()` chain in `_parse_hourly_pv_extras` yields None for those
+    fields in that case — the sensor will simply report unknown.
     """
     hour_iso = hour.get("date")
     if not hour_iso:
         return None
-    visibility = hour.get("visibility", {}) or {}
-    return {
-        "hour_iso": hour_iso,
-        "visibility_meter": visibility.get("meter"),
-        "convection_probability": round(hour.get("convection_probability", 0) * 100),
-    }
+    extras = _parse_hourly_pv_extras(hour)
+    return {"hour_iso": hour_iso} | {k: extras.get(k) for k in _NEXTHOUR_FIELDS}
 
 
 @dataclass

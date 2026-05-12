@@ -1,7 +1,7 @@
 """The WetterOnline coordinator."""
 
 from asyncio import timeout
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -32,10 +32,16 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
         hass: HomeAssistant,
         wetteronline: WetterOnline,
         name: str,
-        update_interval: timedelta,
         nexthour_store: Store,
     ) -> None:
-        """Initialize."""
+        """Initialize.
+
+        `update_interval=None` disables the internal scheduler — refreshes
+        are driven externally by `async_track_time_change(minute="*/5",
+        second=0)` registered in `__init__.py`. Aligning to round 5-min
+        marks keeps sensor state-change timestamps clean and matches the
+        forecast/nowcast bucket boundaries.
+        """
         self.wetteronline = wetteronline
         self.nexthour_store = nexthour_store
         # Sliding-window cache for the visibility/convection sensors.
@@ -64,7 +70,7 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
             hass,
             _LOGGER,
             name=name,
-            update_interval=update_interval,
+            update_interval=None,
         )
 
     async def async_restore_nexthour_cache(self) -> None:
@@ -93,8 +99,8 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
         Stamps `fetched_at` on the new `next` entry so consumers can tell how
         fresh the cached values are. The stamp travels with the data when it
         is promoted to `current`, so the timestamp on `current` reflects the
-        moment its values were last fetched from wo-cloud — typically right
-        before the hour rollover (the :59:30 forced refresh).
+        moment its values were last fetched from wo-cloud — typically the
+        last :55 refresh before the clock-hour rollover.
         """
         if not new_next or not new_next.get("hour_iso"):
             return

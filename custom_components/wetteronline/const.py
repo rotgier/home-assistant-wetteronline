@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Final
 
 from homeassistant.components.weather import (
@@ -179,7 +178,5 @@ SYMBOLTEXT_CONDITION_CUSTOM_MAP.update(
         "teilsNebel,teilsklar": ATTR_CONDITION_FOG_PARTLY,  # partly foggy
     }
 )
-
-UPDATE_INTERVAL_WETTERONLINE = timedelta(minutes=5)
 
 CONF_URL_WETTERONLINE: Final = "url_wetteronline"

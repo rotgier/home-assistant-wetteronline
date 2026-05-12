@@ -173,6 +173,10 @@ class WetterOnlineEntity(
             "air_pressure_hpa": item.get("air_pressure_hpa"),
             "wind_speed_kmh": item.get("wind_speed_kmh"),
             "wind_direction_deg": item.get("wind_direction_deg"),
+            # 15-min sub-hour granularity for the nearest ~105 min, derived
+            # from wo-cloud's `nowcast_trend`. Empty list when out of nowcast
+            # range (>105 min ahead) or when nowcast is unavailable.
+            "nowcast_15min": item.get("nowcast_15min", []),
         }
         self._set_condition(forecast, symbol, symbol_text)
         self._set_custom_condition(forecast, symbol, symbol_text)

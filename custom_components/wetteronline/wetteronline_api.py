@@ -104,6 +104,53 @@ _NEXTHOUR_FIELDS: tuple[str, ...] = (
 )
 
 
+def _parse_nowcast_items(nowcast_trend: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Parse `nowcast_trend.items[]` into a minimal list of 15-min sub-hour entries.
+
+    wo-cloud's nowcast extends ~105 min ahead at 15-min granularity. Each
+    item ships temperature, symbol and precipitation prob/type only —
+    rainfall amount/duration and wind never appear here (live only in
+    `hours[]`). We keep symbol + precipitation fields, which is what makes
+    the data useful as a 15-min refinement of the surrounding hour.
+    """
+    if not nowcast_trend:
+        return []
+    out: list[dict[str, Any]] = []
+    for item in nowcast_trend.get("items", []):
+        date = item.get("date")
+        if not date:
+            continue
+        precipitation = item.get("precipitation", {}) or {}
+        out.append({
+            "date": date,
+            "symbol": item.get("symbol", ""),
+            "precipitation_probability": round(
+                precipitation.get("probability", 0) * 100
+            ),
+            "precipitation_type": precipitation.get("type"),
+        })
+    return out
+
+
+def _group_nowcast_by_hour(
+    nowcast_items: list[dict[str, Any]],
+) -> dict[tuple[int, int, int, int], list[dict[str, Any]]]:
+    """Bucket nowcast items by (year, month, day, hour) of their `date`.
+
+    Items at HH:00, HH:15, HH:30, HH:45 all fall in the same bucket → can be
+    attached as a sub-list to the `hours[]` forecast entry for hour HH.
+    """
+    groups: dict[tuple[int, int, int, int], list[dict[str, Any]]] = {}
+    for item in nowcast_items:
+        try:
+            dt = datetime.fromisoformat(item["date"])
+        except (KeyError, ValueError):
+            continue
+        key = (dt.year, dt.month, dt.day, dt.hour)
+        groups.setdefault(key, []).append(item)
+    return groups
+
+
 def parse_nexthour_extras(hour: dict[str, Any]) -> dict[str, Any] | None:
     """Extract nexthour cache fields from a wo-cloud `hours[]` entry.
 
@@ -231,16 +278,22 @@ class WetterOnline:
         hours = shortcast.get("hours", [])
         next_hour_raw = parse_nexthour_extras(hours[0]) if hours else None
 
+        nowcast_items = _parse_nowcast_items(shortcast.get("nowcast_trend"))
+        nowcast_by_hour = _group_nowcast_by_hour(nowcast_items)
+
         hourly_forecast = []
         for hour in hours:
+            hour_dt = datetime.fromisoformat(hour["date"])
+            hour_key = (hour_dt.year, hour_dt.month, hour_dt.day, hour_dt.hour)
             hourly_forecast.append({
-                "datetime": datetime.fromisoformat(hour["date"]),
+                "datetime": hour_dt,
                 "temperature": hour["air_temperature"]["celsius"],
                 "apparentTemperature": hour["apparent_temperature"]["celsius"],
                 "humidity": round(hour["humidity"] * 100),
                 "symbol": hour.get("symbol", ""),
                 "symbolText": hour.get("symbol", ""),
                 **_parse_hourly_pv_extras(hour),
+                "nowcast_15min": nowcast_by_hour.get(hour_key, []),
             })
 
         daily_forecast = []

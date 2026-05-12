@@ -105,6 +105,26 @@ class WetterOnlineEntity(
         """Return the temperature."""
         return cast(float, self.coordinator.data.current_observations["temperature"])
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose `condition_custom` (granular palette) alongside the standard
+        condition state. The split refactor (commit 823ef02) moved most
+        attributes off this entity to keep recorder snapshots small;
+        `condition_custom` is added back as a single small string so that
+        dashboard charts / templates that already query weather.wetteronline
+        can read the granular variant without a separate sensor lookup.
+
+        Note: consumers reading history (charts, smart_rce weather table)
+        should still source from sensor.wetteronline_condition_custom — that
+        sensor has full state-change history with predictable retention.
+        This attribute is for live/template-time reads only.
+        """
+        return {
+            "condition_custom": self.coordinator.data.current_observations.get(
+                "condition_custom"
+            )
+        }
+
     @callback
     def _async_forecast_daily(self) -> list[Forecast] | None:
         """Return the daily forecast in native units."""

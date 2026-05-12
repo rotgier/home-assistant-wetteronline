@@ -70,7 +70,9 @@ async def async_setup_entry(
         hass.async_create_task(coordinator.async_request_refresh())
 
     entry.async_on_unload(
-        async_track_time_change(hass, _aligned_refresh, minute="*/5", second=0)
+        async_track_time_change(
+            hass, _aligned_refresh, minute=list(range(0, 60, 5)), second=0
+        )
     )
 
     entry.runtime_data = coordinator

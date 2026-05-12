@@ -340,15 +340,37 @@ class WetterOnlineNexthourSensor(
 
     @property
     def native_value(self) -> Any:
-        current = self.coordinator.nexthour_cache.get("current") if (
-            self.coordinator.nexthour_cache
-        ) else None
+        current = self._current_entry()
         if not current:
-            return None
-        if not _matches_current_hour(current.get("hour_iso")):
             return None
         field = NEXTHOUR_FIELD_BY_KEY[self.entity_description.key]
         return current.get(field)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose `fetched_at` so callers can tell how stale the value is.
+
+        The stamp travels with the data through the next → current
+        promotion, so its value reflects when the wo-cloud fetch that
+        produced this hour's value happened — usually right before the
+        hour rollover (:59:30 forced refresh).
+        """
+        current = self._current_entry()
+        if not current:
+            return None
+        fetched_at = current.get("fetched_at")
+        if not fetched_at:
+            return None
+        return {"fetched_at": fetched_at}
+
+    def _current_entry(self) -> dict[str, Any] | None:
+        cache = self.coordinator.nexthour_cache
+        if not cache:
+            return None
+        current = cache.get("current")
+        if not current or not _matches_current_hour(current.get("hour_iso")):
+            return None
+        return current
 
 
 def _matches_current_hour(iso: str | None) -> bool:

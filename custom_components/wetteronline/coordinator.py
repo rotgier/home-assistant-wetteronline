@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .wetteronline_api import WetterOnline, WetterOnlineData
@@ -80,17 +81,25 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
         return result
 
     def _update_nexthour_cache(self, new_next: dict[str, Any] | None) -> None:
-        """Promote `next → current` on hour rollover, refresh `next` otherwise."""
+        """Promote `next → current` on hour rollover, refresh `next` otherwise.
+
+        Stamps `fetched_at` on the new `next` entry so consumers can tell how
+        fresh the cached values are. The stamp travels with the data when it
+        is promoted to `current`, so the timestamp on `current` reflects the
+        moment its values were last fetched from wo-cloud — typically right
+        before the hour rollover (the :59:30 forced refresh).
+        """
         if not new_next or not new_next.get("hour_iso"):
             return
+        stamped_next = {**new_next, "fetched_at": dt_util.now().isoformat()}
         current_next = self.nexthour_cache.get("next")
         if current_next and current_next.get("hour_iso") == new_next["hour_iso"]:
             # Same upcoming hour — refresh values, forecast precision improves
             # as the hour approaches.
-            self.nexthour_cache["next"] = new_next
+            self.nexthour_cache["next"] = stamped_next
         else:
             # Hour boundary crossed since last fetch — what was "next" is now
             # the current hour's data; this fetch's hours[0] becomes the new
             # "next".
             self.nexthour_cache["current"] = current_next
-            self.nexthour_cache["next"] = new_next
+            self.nexthour_cache["next"] = stamped_next

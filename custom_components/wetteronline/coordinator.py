@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .hourly_forecast import HourlyForecastInput
 from .wetteronline_api import WetterOnline, WetterOnlineData
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,6 +72,25 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
             _LOGGER,
             name=name,
             update_interval=None,
+        )
+
+    @property
+    def forecast_input(self) -> HourlyForecastInput | None:
+        """Snapshot of state needed by `hourly_forecast.build_hourly_forecast`.
+
+        Glue layer: infra → domain. Entities call this to obtain a frozen DTO
+        and pass it to the pure-domain builder. Returns None until the first
+        successful fetch populates `self.data`.
+        """
+        data = self.data
+        if data is None:
+            return None
+        return HourlyForecastInput(
+            hourly_forecast=data.hourly_forecast,
+            current_observations=data.current_observations,
+            nexthour_cache_current=(self.nexthour_cache or {}).get("current"),
+            last_fetched_at=self.last_fetched_at,
+            nowcast_items=data.nowcast_items,
         )
 
     async def async_restore_nexthour_cache(self) -> None:

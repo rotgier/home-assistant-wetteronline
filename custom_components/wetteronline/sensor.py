@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -31,8 +31,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
+from homeassistant.components.weather import ATTR_FORECAST_TIME
+
 from . import WetterOnlineConfigEntry
 from .coordinator import WeatherOnlineDataUpdateCoordinator
+from .hourly_forecast import build_hourly_forecast
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -240,6 +243,8 @@ async def async_setup_entry(
     name = entry.data[CONF_NAME]
     entities: list[SensorEntity] = [
         WetterOnlineConditionCustomSensor(coordinator, name),
+        WetterOnlineForecastForTodaySensor(coordinator, name),
+        WetterOnlineForecastForTomorrowSensor(coordinator, name),
     ]
     entities.extend(
         WetterOnlineObservationSensor(coordinator, name, desc)
@@ -382,3 +387,94 @@ def _matches_current_hour(iso: str | None) -> bool:
         return False
     now = dt_util.now()
     return stored.date() == now.date() and stored.hour == now.hour
+
+
+class _WetterOnlineForecastForDateSensor(
+    CoordinatorEntity[WeatherOnlineDataUpdateCoordinator], SensorEntity
+):
+    """Hourly forecast for a specific day (today or tomorrow), recorder-friendly.
+
+    State: ISO date — stable per day, changes only at midnight rollover.
+    Avoids spamming recorder with state changes on every 5-min coordinator
+    refresh. Attribute changes still flow into history.
+
+    Attribute `forecast`: list of hourly slots whose `datetime` matches the
+    target day, with `fetched_at` stripped to prevent fake updates triggered
+    by every coordinator refresh.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: WeatherOnlineDataUpdateCoordinator,
+        name: str,
+        unique_suffix: str,
+        display_name: str,
+        offset_days: int,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{name}_{unique_suffix}"
+        self._attr_name = display_name
+        self._attr_device_info = coordinator.device_info
+        self._offset_days = offset_days
+
+    @property
+    def native_value(self) -> str | None:
+        if not self.coordinator.data:
+            return None
+        target = dt_util.now().date() + timedelta(days=self._offset_days)
+        return target.isoformat()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        inp = self.coordinator.forecast_input
+        if inp is None:
+            return None
+        now = dt_util.now()
+        target = now.date() + timedelta(days=self._offset_days)
+        full = build_hourly_forecast(inp, now)
+        slots = []
+        for slot in full:
+            ts_iso = slot.get(ATTR_FORECAST_TIME)
+            if not ts_iso:
+                continue
+            try:
+                ts = datetime.fromisoformat(ts_iso)
+            except ValueError:
+                continue
+            if ts.date() != target:
+                continue
+            slot_clean = {k: v for k, v in slot.items() if k != "fetched_at"}
+            slots.append(slot_clean)
+        return {"forecast": slots}
+
+
+class WetterOnlineForecastForTodaySensor(_WetterOnlineForecastForDateSensor):
+    """Hourly forecast for today."""
+
+    def __init__(
+        self, coordinator: WeatherOnlineDataUpdateCoordinator, name: str
+    ) -> None:
+        super().__init__(
+            coordinator,
+            name,
+            unique_suffix="forecast_for_today",
+            display_name="Forecast for Today",
+            offset_days=0,
+        )
+
+
+class WetterOnlineForecastForTomorrowSensor(_WetterOnlineForecastForDateSensor):
+    """Hourly forecast for tomorrow."""
+
+    def __init__(
+        self, coordinator: WeatherOnlineDataUpdateCoordinator, name: str
+    ) -> None:
+        super().__init__(
+            coordinator,
+            name,
+            unique_suffix="forecast_for_tomorrow",
+            display_name="Forecast for Tomorrow",
+            offset_days=1,
+        )

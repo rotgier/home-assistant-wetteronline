@@ -40,16 +40,10 @@ from homeassistant.util.dt import now as now_local
 
 from . import WetterOnlineConfigEntry
 from .const import (
-    ATTR_CONDITION_UNKNOWN,
-    ATTR_FORECAST_CONDITION_CUSTOM,
-    ATTR_FORECAST_CONDITION_SYMBOL,
-    ATTR_FORECAST_CONDITION_SYMBOLTEXT,
-    ATTR_FORECAST_SYMBOL,
-    ATTR_FORECAST_SYMBOLTEXT,
-    SYMBOLTEXT_CONDITION_CUSTOM_MAP,
     SYMBOLTEXT_CONDITION_MAP,
 )
 from .coordinator import WeatherOnlineDataUpdateCoordinator
+from .hourly_forecast import build_hourly_forecast
 
 PARALLEL_UPDATES = 1
 
@@ -157,185 +151,11 @@ class WetterOnlineEntity(
 
     @callback
     def _async_forecast_hourly(self) -> list[Forecast] | None:
-        """Return the hourly forecast in native units.
-
-        Prepends a synthesized entry for the current clock hour. wo-cloud's
-        `hours[]` typically starts at the next round hour, so without this
-        prepend the forecast list skips the hour we are actually in — the
-        most decision-relevant slot for "should I run X now". The synthesized
-        entry blends `current_observations` (live point-in-time),
-        `nexthour_cache.current` (hour-forecast cached before rollover)
-        and the 15-min nowcast items that fall in the current hour.
-
-        Edge case: in a ~5 min window right after a clock hour rolls over
-        and before the next coordinator fetch, wo-cloud's `hours[0]` may
-        still report the now-current round hour (because the upstream fetch
-        happened before rollover, and "next round hour" from then is the
-        current hour now). In that window the synthesized entry and
-        `hours[0]` would both target the same hour — we replace `hours[0]`
-        with the synthesized entry instead of duplicating, since synthesized
-        carries strictly richer data (live obs + cache + nowcast).
-        """
-        items = [
-            self._hourly_forecast_item(item)
-            for item in self.coordinator.data.hourly_forecast
-        ]
-        synthesized = self._synthesize_current_hour_forecast()
-        if not synthesized:
-            return items
-        if items and _same_hour(items[0][ATTR_FORECAST_TIME],
-                                synthesized[ATTR_FORECAST_TIME]):
-            return [synthesized, *items[1:]]
-        return [synthesized, *items]
-
-    def _synthesize_current_hour_forecast(self) -> Forecast | None:
-        """Build a `Forecast` entry for the current clock hour from cached + live data.
-
-        Returns None only when current observations are entirely missing
-        (right after install, before the first successful fetch). When
-        `nexthour_cache.current` is absent or stale (warm-up window, long
-        outage), the cache-sourced fields fall back to None — the synthesis
-        still returns a useful entry from live observations + nowcast.
-        """
-        data = self.coordinator.data
-        obs = data.current_observations if data else None
-        if not obs:
+        """Return hourly forecast with synthesized current-hour entry."""
+        inp = self.coordinator.forecast_input
+        if inp is None:
             return None
-        cache_current = (self.coordinator.nexthour_cache or {}).get("current") or {}
-
-        now = dt_util.now()
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        symbol = obs.get("symbol", "")
-        symbol_text = symbol
-
-        forecast: Forecast = {
-            ATTR_FORECAST_TIME: current_hour.isoformat(),
-            ATTR_FORECAST_NATIVE_TEMP: obs.get("temperature"),
-            ATTR_FORECAST_NATIVE_APPARENT_TEMP: obs.get("apparentTemperature"),
-            ATTR_FORECAST_HUMIDITY: obs.get("humidity"),
-            ATTR_FORECAST_PRECIPITATION_PROBABILITY: obs.get(
-                "precipitation_probability"
-            ),
-            ATTR_FORECAST_SYMBOL: symbol,
-            ATTR_FORECAST_SYMBOLTEXT: symbol_text,
-            # Cache-sourced — hour-forecast for the current hour, captured
-            # before it became current (typically the :59:30 forced fetch).
-            "precipitation_amount_mm_min": cache_current.get(
-                "precipitation_amount_mm_min"
-            ),
-            "precipitation_amount_mm_max": cache_current.get(
-                "precipitation_amount_mm_max"
-            ),
-            "precipitation_duration_min_min": cache_current.get(
-                "precipitation_duration_min_min"
-            ),
-            "precipitation_duration_min_max": cache_current.get(
-                "precipitation_duration_min_max"
-            ),
-            "convection_probability": cache_current.get("convection_probability"),
-            "visibility_meter": cache_current.get("visibility_meter"),
-            # Live point-in-time — semantically "now", not hour aggregate.
-            "precipitation_type": obs.get("precipitation_type"),
-            "smog_level": obs.get("smog_level"),
-            "dew_point_celsius": obs.get("dew_point_celsius"),
-            "air_pressure_hpa": obs.get("air_pressure_hpa"),
-            "wind_speed_kmh": obs.get("wind_speed_kmh"),
-            "wind_direction_deg": obs.get("wind_direction_deg"),
-            # 15-min sub-hour items for the current hour (some slots may be
-            # past from a real-time perspective; consumers can filter).
-            "nowcast_15min": self._nowcast_items_for_current_hour(now),
-            # When the coordinator last fetched any wo-cloud data. Purely
-            # informational — lets consumers display data freshness.
-            "fetched_at": (
-                self.coordinator.last_fetched_at.isoformat()
-                if self.coordinator.last_fetched_at
-                else None
-            ),
-        }
-        self._set_condition(forecast, symbol, symbol_text)
-        self._set_custom_condition(forecast, symbol, symbol_text)
-        return forecast
-
-    def _nowcast_items_for_current_hour(self, now: datetime) -> list[dict[str, Any]]:
-        data = self.coordinator.data
-        if not data or not data.nowcast_items:
-            return []
-        out: list[dict[str, Any]] = []
-        for item in data.nowcast_items:
-            try:
-                dt = datetime.fromisoformat(item["date"])
-            except (KeyError, ValueError):
-                continue
-            if dt.date() == now.date() and dt.hour == now.hour:
-                out.append(item)
-        return out
-
-    def _hourly_forecast_item(self, item: dict[str, Any]) -> Forecast:
-        symbol = item["symbol"]
-        symbol_text = item["symbolText"]
-        forecast = {
-            ATTR_FORECAST_TIME: item["datetime"].isoformat(),
-            ATTR_FORECAST_NATIVE_TEMP: item["temperature"],
-            ATTR_FORECAST_NATIVE_APPARENT_TEMP: item["apparentTemperature"],
-            ATTR_FORECAST_HUMIDITY: item["humidity"],
-            ATTR_FORECAST_SYMBOL: symbol,
-            ATTR_FORECAST_SYMBOLTEXT: symbol_text,
-            # PV-relevant extras from wo-cloud (Faza 1).
-            # ATTR_FORECAST_PRECIPITATION_PROBABILITY is a standard HA key —
-            # use it so HA frontends recognize the value automatically.
-            ATTR_FORECAST_PRECIPITATION_PROBABILITY: item.get(
-                "precipitation_probability"
-            ),
-            "precipitation_amount_mm_min": item.get("precipitation_amount_mm_min"),
-            "precipitation_amount_mm_max": item.get("precipitation_amount_mm_max"),
-            "precipitation_duration_min_min": item.get(
-                "precipitation_duration_min_min"
-            ),
-            "precipitation_duration_min_max": item.get(
-                "precipitation_duration_min_max"
-            ),
-            "precipitation_type": item.get("precipitation_type"),
-            "convection_probability": item.get("convection_probability"),
-            "visibility_meter": item.get("visibility_meter"),
-            "smog_level": item.get("smog_level"),
-            "dew_point_celsius": item.get("dew_point_celsius"),
-            "air_pressure_hpa": item.get("air_pressure_hpa"),
-            "wind_speed_kmh": item.get("wind_speed_kmh"),
-            "wind_direction_deg": item.get("wind_direction_deg"),
-            # 15-min sub-hour granularity for the nearest ~105 min, derived
-            # from wo-cloud's `nowcast_trend`. Empty list when out of nowcast
-            # range (>105 min ahead) or when nowcast is unavailable.
-            "nowcast_15min": item.get("nowcast_15min", []),
-        }
-        self._set_condition(forecast, symbol, symbol_text)
-        self._set_custom_condition(forecast, symbol, symbol_text)
-        return forecast
-
-    def _set_condition(self, forecast, symbol, symbol_text):
-        mapped_symbol = SYMBOLTEXT_CONDITION_MAP.get(symbol)
-        condition = mapped_symbol if mapped_symbol else symbol
-        forecast[ATTR_FORECAST_CONDITION] = condition
-
-    def _set_custom_condition(self, forecast: Forecast, symbol: str, symbol_text: str):
-        mapped_symbol = SYMBOLTEXT_CONDITION_CUSTOM_MAP.get(symbol)
-        mapped_symbol_text = SYMBOLTEXT_CONDITION_CUSTOM_MAP.get(symbol_text)
-        if mapped_symbol and mapped_symbol_text:
-            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = mapped_symbol
-            if mapped_symbol != mapped_symbol_text:
-                forecast[ATTR_FORECAST_CONDITION_SYMBOL] = mapped_symbol
-                forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = mapped_symbol_text
-        elif mapped_symbol:
-            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = mapped_symbol
-            forecast[ATTR_FORECAST_CONDITION_SYMBOL] = mapped_symbol
-            forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = ATTR_CONDITION_UNKNOWN
-        elif mapped_symbol_text:
-            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = symbol
-            forecast[ATTR_FORECAST_CONDITION_SYMBOL] = ATTR_CONDITION_UNKNOWN
-            forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = mapped_symbol_text
-        else:
-            forecast[ATTR_FORECAST_CONDITION_CUSTOM] = symbol
-            forecast[ATTR_FORECAST_CONDITION_SYMBOL] = ATTR_CONDITION_UNKNOWN
-            forecast[ATTR_FORECAST_CONDITION_SYMBOLTEXT] = ATTR_CONDITION_UNKNOWN
+        return build_hourly_forecast(inp, dt_util.now())
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
@@ -350,13 +170,3 @@ class WetterOnlineEntity(
 
 def _map_symbol_to_condition(symbol: str) -> str:
     return SYMBOLTEXT_CONDITION_MAP.get(symbol, symbol)
-
-
-def _same_hour(iso_a: str, iso_b: str) -> bool:
-    """True when two ISO timestamps share (date, hour)."""
-    try:
-        a = datetime.fromisoformat(iso_a)
-        b = datetime.fromisoformat(iso_b)
-    except (TypeError, ValueError):
-        return False
-    return a.date() == b.date() and a.hour == b.hour

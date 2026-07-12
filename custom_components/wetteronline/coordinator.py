@@ -17,6 +17,13 @@ from .wetteronline_api import WetterOnline, WetterOnlineData
 
 _LOGGER = logging.getLogger(__name__)
 
+# Fired on the bus once per ~5-min refresh cycle so external consumers (e.g.
+# smart_rce garden rain observation) get a guaranteed heartbeat: UPDATED on a
+# successful fetch, UPDATE_FAILED otherwise. Together they mean "one signal
+# every cycle, always", regardless of whether the data changed.
+EVENT_WEATHER_UPDATED = f"{DOMAIN}_weather_updated"
+EVENT_WEATHER_UPDATE_FAILED = f"{DOMAIN}_weather_update_failed"
+
 NEXTHOUR_CACHE_VERSION = 1
 NEXTHOUR_EMPTY_CACHE: dict[str, Any] = {
     "version": NEXTHOUR_CACHE_VERSION,
@@ -106,11 +113,13 @@ class WeatherOnlineDataUpdateCoordinator(DataUpdateCoordinator[WetterOnlineData]
                 result = await self.wetteronline.async_get_weather()
         except Exception as error:
             _LOGGER.exception("Update failed")
+            self.hass.bus.async_fire(EVENT_WEATHER_UPDATE_FAILED)
             raise UpdateFailed(error) from error
 
         self.last_fetched_at = dt_util.now()
         self._update_nexthour_cache(result.next_hour_raw)
         await self.nexthour_store.async_save(self.nexthour_cache)
+        self.hass.bus.async_fire(EVENT_WEATHER_UPDATED)
         return result
 
     def _update_nexthour_cache(self, new_next: dict[str, Any] | None) -> None:
